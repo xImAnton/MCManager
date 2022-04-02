@@ -98,13 +98,17 @@ def autostart(ctx: click.Context):
 @autostart.command(name="on", help="enable autostart for the current server")
 @click.pass_context
 def autostart_on(ctx: click.Context):
-    echo("enable autostart")
+    server: ServerInformation = ctx.obj["SERVER"]
+    server.data["autostart"] = "true"
+    server.save_data()
 
 
 @autostart.command(name="off", help="enable autostart for the current server")
 @click.pass_context
 def autostart_off(ctx: click.Context):
-    echo("disable autostart")
+    server: ServerInformation = ctx.obj["SERVER"]
+    server.data["autostart"] = "false"
+    server.save_data()
 
 
 @main.command(help="get/set how much ram this server is allocated")
