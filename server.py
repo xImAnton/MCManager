@@ -96,7 +96,8 @@ class ServerInformation:
 
     def get_stats(self) -> tuple[float, float]:
         proc: psutil.Process = psutil.Process(self.screen_handle.pid).children()[0]
-        return proc.cpu_percent(interval=0.5), round(proc.memory_info().rss / 1000000000, 2)
+        proc.cpu_percent(interval=0.5)
+        return proc.cpu_percent(), round(proc.memory_info().rss / 1000000000, 2)
 
     def send_command(self, cmd: str, execute: bool = True) -> None:
         if execute:
