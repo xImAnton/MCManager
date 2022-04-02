@@ -75,9 +75,12 @@ class ServerInformation:
     @cached_property
     def screen_handle(self) -> Optional[Screen]:
         for screen in get_running_servers():
-            if screen.name == self.id:
+            if screen.name == self.screen_name:
                 return screen
         return None
+
+    def open_console(self):
+        subprocess.run(["screen", "-x", self.screen_handle], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 
     @property
     def id(self) -> str:

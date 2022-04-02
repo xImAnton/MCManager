@@ -8,7 +8,7 @@ from server import ServerInformation
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
-@click.option("--dir", "-p", "server_path", help="the directory of the current server", default=os.getcwd(), type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option("--dir", "-p", "server_path", help="set the directory of the current server", default=os.getcwd(), type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.pass_context
 def main(ctx: click.Context, server_path: str):
     ctx.ensure_object(dict)
@@ -16,10 +16,10 @@ def main(ctx: click.Context, server_path: str):
 
 
 @main.command(help="start the current server")
-@click.option("--ram", "-r", "ram_", help="specified how much ram this server is given (overrides default if specified)", default=None, type=click.STRING)
-# TODO: @click.option("--console", "-c", help="attach to the servers console after it started", is_flag=True, default=False)
+@click.option("--ram", "-r", "ram_", help="specifies how much ram this server is given (overrides default if specified)", default=None, type=click.STRING)
+@click.option("--console", "-c", "open_console", help="attach to the servers console after it started", is_flag=True, default=False)
 @click.pass_context
-def start(ctx: click.Context, ram_: str):
+def start(ctx: click.Context, ram_: str, open_console: bool):
     server: ServerInformation = ctx.obj["SERVER"]
 
     if server.running:
@@ -28,11 +28,15 @@ def start(ctx: click.Context, ram_: str):
 
     server.start(ram=ram_)
 
-    if server.running:
-        echo("server successfully started")
+    if not server.running:
+        echo("error while starting server")
         return
 
-    echo("error while starting server")
+    echo("server successfully started")
+
+    if open_console:
+        echo("attaching to console")
+        server.open_console()
 
 
 @main.command(help="stop the current server")
@@ -49,8 +53,15 @@ def stop(ctx):
 
 
 @main.command(help="show the console of the current server")
-def console():
-    pass
+@click.pass_context
+def console(ctx: click.Context):
+    server: ServerInformation = ctx.obj["SERVER"]
+
+    if not server.running:
+        echo("server needs to be started first")
+        return
+
+    server.open_console()
 
 
 @main.command(help="show information about the current server")
