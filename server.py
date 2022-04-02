@@ -12,6 +12,23 @@ from click import echo
 
 from screen import get_running_servers, Screen
 
+
+def clean_path(p: pathlib.Path) -> pathlib.Path:
+    out = []
+
+    for part in p.parts:
+        if part == "..":
+            out.pop()
+            continue
+
+        if part == ".":
+            continue
+
+        out.append(part)
+
+    return pathlib.Path("/").joinpath(*out)
+
+
 RC_PATH = pathlib.Path("~/.mcsrvrc").expanduser()
 
 
@@ -39,7 +56,7 @@ class ServerInformation:
             return f.readlines()
 
     def __init__(self, path: str):
-        self.path: pathlib.Path = pathlib.Path(path).absolute()
+        self.path: pathlib.Path = clean_path(pathlib.Path(path).absolute())
         self.data: dict[str, str] = {}
         self._load_data()
         self.jar: pathlib.Path = self._locate_jar()
