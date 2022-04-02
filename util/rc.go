@@ -37,14 +37,12 @@ func GetAllServerPaths() ([]string, error) {
 
 func SaveServerPath(p string) error {
 	existing, err := GetAllServerPaths()
-	if err != nil {
-		return err
-	}
-
-	// check if server is already saved
-	for _, srv := range existing {
-		if srv == p {
-			return nil
+	if err == nil {
+		// check if server is already saved
+		for _, srv := range existing {
+			if srv == p {
+				return nil
+			}
 		}
 	}
 
