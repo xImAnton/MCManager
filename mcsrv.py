@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 import os
 
 import click
@@ -53,8 +54,17 @@ def console():
 
 
 @main.command(help="show information about the current server")
-def info():
-    pass
+@click.pass_context
+def info(ctx: click.Context):
+    server: ServerInformation = ctx.obj["SERVER"]
+
+    print(f"""Server Information:
+      Jar-File:    {server.jar}
+      ID:          {server.id}
+      Running:     {server.running}
+      Path:        {server.path}
+      Screen-Name: {server.screen_name}
+    """)
 
 
 @main.command(help="get/set whether this server is started with the system")
