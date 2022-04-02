@@ -50,7 +50,7 @@ class ServerInformation:
         if str(self.path) in self.get_registered_servers():
             return
 
-        with RC_PATH.open("a") as f:
+        with RC_PATH.open("a" if RC_PATH.is_file() else "w") as f:
             f.write(f"{self.path}\n")
 
     @property
