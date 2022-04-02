@@ -58,13 +58,12 @@ def console():
 def info(ctx: click.Context):
     server: ServerInformation = ctx.obj["SERVER"]
 
-    print(f"""Server Information:
-      Jar-File:    {server.jar}
-      ID:          {server.id}
-      Running:     {server.running}
-      Path:        {server.path}
-      Screen-Name: {server.screen_name}
-    """)
+    echo(f"""Server Information:
+  Jar-File:      {server.jar}
+  ID:            {server.id}
+  Running:       {server.running}
+  Path:          {server.path}
+  Screen-Handle: {server.screen_handle}""")
 
 
 @main.command(help="get/set whether this server is started with the system")

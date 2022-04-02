@@ -2,13 +2,15 @@ import os
 import pathlib
 import re
 import subprocess
+from typing import Optional
+from functools import cached_property
 
 import click.exceptions
 import inquirer
 
 from click import echo
 
-from screen import get_running_servers
+from screen import get_running_servers, Screen
 
 
 def check_ram_argument(i: str) -> str:
@@ -68,7 +70,14 @@ class ServerInformation:
 
     @property
     def running(self) -> bool:
-        return self.id in get_running_servers()
+        return self.screen_handle is not None
+
+    @cached_property
+    def screen_handle(self) -> Optional[Screen]:
+        for screen in get_running_servers():
+            if screen.name == self.id:
+                return screen
+        return None
 
     @property
     def id(self) -> str:

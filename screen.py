@@ -5,10 +5,17 @@ import re
 SCREEN_NAME = re.compile(r"[0-9]+\.(mc-.+)")
 
 
-def get_running_servers() -> list[str]:
+class Screen:
+    def __init__(self, sock: str):
+        s = sock.split(".", 1)
+        self.pid: int = int(s[0])
+        self.name: str = s[1]
+
+
+def get_running_servers() -> list[Screen]:
     screen_dir = pathlib.Path(f"/run/screen/S-{os.getlogin()}")
 
     if not screen_dir.is_dir():
         return []
 
-    return [s.name for s in screen_dir.glob("*.mc-*")]
+    return [Screen(s.name) for s in screen_dir.glob("*.mc-*")]
