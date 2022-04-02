@@ -80,7 +80,7 @@ class ServerInformation:
         return None
 
     def open_console(self):
-        subprocess.run(["screen", "-x", self.screen_handle], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        subprocess.run(["screen", "-x", str(self.screen_handle)], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 
     @property
     def id(self) -> str:
