@@ -73,12 +73,16 @@ def console(ctx: click.Context):
 def info(ctx: click.Context):
     server: ServerInformation = ctx.obj["SERVER"]
 
+    cpu, ram_ = server.get_stats()
+
     echo(f"""Server Information:
-  Jar-File:      {server.jar}
   ID:            {server.id}
-  Running:       {server.running}
   Path:          {server.path}
-  Screen-Handle: {server.screen_handle}""")
+  Jar-File:      {server.jar}
+  Running:       {server.running}
+  Screen-Handle: {server.screen_handle}
+  CPU-Usage:     {cpu}%
+  RAM-Usage:     {ram_}GB""")
 
 
 @main.command(help="get/set whether this server is started with the system")

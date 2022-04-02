@@ -9,6 +9,7 @@ from typing import Optional
 import click.exceptions
 import inquirer
 from click import echo
+import psutil
 
 from screen import get_running_servers, Screen
 
@@ -63,13 +64,6 @@ class ServerInformation:
         self.save_data()
         self.register()
 
-    def register(self) -> None:
-        if str(self.path) in self.get_registered_servers():
-            return
-
-        with RC_PATH.open("a" if RC_PATH.is_file() else "w") as f:
-            f.write(f"{self.path}\n")
-
     @property
     def running(self) -> bool:
         return self.screen_handle is not None
@@ -92,6 +86,17 @@ class ServerInformation:
     @property
     def screen_name(self):
         return f"mc-{self.id}"
+
+    def register(self) -> None:
+        if str(self.path) in self.get_registered_servers():
+            return
+
+        with RC_PATH.open("a" if RC_PATH.is_file() else "w") as f:
+            f.write(f"{self.path}\n")
+
+    def get_stats(self) -> tuple[float, float]:
+        proc: psutil.Process = psutil.Process(self.screen_handle.pid).children()[0]
+        return proc.cpu_percent(interval=0.5), round(proc.memory_info().rss / 1000000000, 2)
 
     def send_command(self, cmd: str, execute: bool = True) -> None:
         if execute:
