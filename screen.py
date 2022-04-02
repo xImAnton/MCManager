@@ -1,5 +1,5 @@
-import pathlib
 import os
+import pathlib
 import re
 
 SCREEN_NAME = re.compile(r"[0-9]+\.(mc-.+)")

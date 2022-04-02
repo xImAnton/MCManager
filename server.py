@@ -3,15 +3,16 @@ import pathlib
 import re
 import shlex
 import subprocess
-from typing import Optional
 from functools import cached_property
+from typing import Optional
 
 import click.exceptions
 import inquirer
-
 from click import echo
 
 from screen import get_running_servers, Screen
+
+RC_PATH = pathlib.Path("~/.mcsrvrc")
 
 
 def check_ram_argument(i: str) -> str:
@@ -29,15 +30,57 @@ class ServerInformation:
     def from_cwd(cls):
         return ServerInformation(os.getcwd())
 
+    @classmethod
+    def get_registered_servers(cls) -> list[str]:
+        if not RC_PATH.is_file():
+            return []
+
+        with RC_PATH.open("r") as f:
+            return f.readlines()
+
     def __init__(self, path: str):
-        self.path: pathlib.Path = pathlib.Path(path)
+        self.path: pathlib.Path = pathlib.Path(path).absolute()
         self.data: dict[str, str] = {}
         self._load_data()
         self.jar: pathlib.Path = self._locate_jar()
         self.save_data()
+        self.register()
 
-    def send_command(self, cmd: str) -> None:
-        subprocess.run(["screen", "-S", self.screen_name, "-p", "0", "-X", "stuff", cmd + "^M"])
+    def register(self) -> None:
+        if str(self.path) in self.get_registered_servers():
+            return
+
+        with RC_PATH.open("a") as f:
+            f.write(f"{self.path}\n")
+
+    @property
+    def running(self) -> bool:
+        return self.screen_handle is not None
+
+    @cached_property
+    def screen_handle(self) -> Optional[Screen]:
+        for screen in get_running_servers():
+            if screen.name == self.screen_name:
+                return screen
+        return None
+
+    @property
+    def id(self) -> str:
+        return self.path.name
+
+    @property
+    def datafile(self) -> pathlib.Path:
+        return self.path.joinpath(".mcsrvmeta")
+
+    @property
+    def screen_name(self):
+        return f"mc-{self.id}"
+
+    def send_command(self, cmd: str, execute: bool = True) -> None:
+        if execute:
+            cmd += "^M"
+
+        subprocess.run(["screen", "-S", self.screen_name, "-p", "0", "-X", "stuff", cmd])
 
     def start(self, ram: str = None) -> None:
         ram = check_ram_argument(ram if ram else self.data.get("ram", "4G"))
@@ -69,31 +112,8 @@ class ServerInformation:
         self.data["jar"] = answer["jar"].name
         return answer["jar"]
 
-    @property
-    def running(self) -> bool:
-        return self.screen_handle is not None
-
-    @cached_property
-    def screen_handle(self) -> Optional[Screen]:
-        for screen in get_running_servers():
-            if screen.name == self.screen_name:
-                return screen
-        return None
-
     def open_console(self):
         os.system(shlex.join(["screen", "-x", str(self.screen_handle)]))
-
-    @property
-    def id(self) -> str:
-        return self.path.name
-
-    @property
-    def datafile(self) -> pathlib.Path:
-        return self.path.joinpath(".mcsrvmeta")
-
-    @property
-    def screen_name(self):
-        return f"mc-{self.id}"
 
     def save_data(self):
         with self.datafile.open("w") as f:

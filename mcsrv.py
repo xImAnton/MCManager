@@ -8,7 +8,8 @@ from server import ServerInformation
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
-@click.option("--dir", "-p", "server_path", help="set the directory of the current server", default=os.getcwd(), type=click.Path(exists=True, file_okay=False, dir_okay=True))
+@click.option("--dir", "-p", "server_path", help="set the directory of the current server", default=os.getcwd(),
+              type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.pass_context
 def main(ctx: click.Context, server_path: str):
     ctx.ensure_object(dict)
@@ -16,8 +17,11 @@ def main(ctx: click.Context, server_path: str):
 
 
 @main.command(help="start the current server")
-@click.option("--ram", "-r", "ram_", help="specifies how much ram this server is given (overrides default if specified)", default=None, type=click.STRING)
-@click.option("--console", "-c", "open_console", help="attach to the servers console after it started", is_flag=True, default=False)
+@click.option("--ram", "-r", "ram_",
+              help="specifies how much ram this server is given (overrides default if specified)", default=None,
+              type=click.STRING)
+@click.option("--console", "-c", "open_console", help="attach to the servers console after it started", is_flag=True,
+              default=False)
 @click.pass_context
 def start(ctx: click.Context, ram_: str, open_console: bool):
     server: ServerInformation = ctx.obj["SERVER"]
