@@ -51,6 +51,7 @@ class ServerInformation:
         jars = list(self.path.glob("*.jar"))
 
         if len(jars) == 0:
+            echo("no server found in the current directory")
             raise click.exceptions.Exit(code=1)
 
         if len(jars) == 1:
