@@ -72,7 +72,6 @@ def console(ctx: click.Context):
 @click.pass_context
 def info(ctx: click.Context):
     server: ServerInformation = ctx.obj["SERVER"]
-
     cpu, ram_ = server.get_stats()
 
     echo(f"""Server Information:
@@ -85,9 +84,27 @@ def info(ctx: click.Context):
   RAM-Usage:     {ram_}GB""")
 
 
-@main.command(help="get/set whether this server is started with the system")
-def autostart():
-    pass
+@main.group(help="get/set whether this server is started with the system", invoke_without_command=True)
+@click.pass_context
+def autostart(ctx: click.Context):
+    if ctx.invoked_subcommand is not None:
+        return
+
+    server: ServerInformation = ctx.obj["SERVER"]
+
+    echo(f"Autostart of server {server.id} is currently {'enabled' if server.data.get('autostart', 'false').lower() == 'true' else 'disabled'}")
+
+
+@autostart.command(name="on", help="enable autostart for the current server")
+@click.pass_context
+def autostart_on(ctx: click.Context):
+    echo("enable autostart")
+
+
+@autostart.command(name="off", help="enable autostart for the current server")
+@click.pass_context
+def autostart_off(ctx: click.Context):
+    echo("disable autostart")
 
 
 @main.command(help="get/set how much ram this server is allocated")
