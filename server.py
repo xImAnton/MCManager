@@ -1,6 +1,7 @@
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 from typing import Optional
 from functools import cached_property
@@ -80,7 +81,7 @@ class ServerInformation:
         return None
 
     def open_console(self):
-        subprocess.run(["screen", "-x", str(self.screen_handle)], stdin=subprocess.PIPE, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        os.system(shlex.join(["screen", "-x", str(self.screen_handle)]))
 
     @property
     def id(self) -> str:
