@@ -11,6 +11,12 @@ class Screen:
         self.pid: int = int(s[0])
         self.name: str = s[1]
 
+    def __repr__(self):
+        return f"{self.pid}.{self.name}"
+
+    def __str__(self):
+        return self.__repr__()
+
 
 def get_running_servers() -> list[Screen]:
     screen_dir = pathlib.Path(f"/run/screen/S-{os.getlogin()}")
