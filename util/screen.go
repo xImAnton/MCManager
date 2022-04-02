@@ -16,7 +16,7 @@ func GetRunningScreens() []string {
 	lines := strings.Split(string(stdout), "\n")
 	var screens []string
 
-	for _, line := range lines[1 : len(lines)-1] {
+	for _, line := range lines[1 : len(lines)-2] {
 		words := strings.Fields(strings.TrimSpace(line))
 		screens = append(screens, words[0])
 	}

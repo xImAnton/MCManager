@@ -56,7 +56,7 @@ func (info *ServerInfo) GetStoredData() (StoredData, error) {
 	for _, line := range strings.Split(lines, "\n") {
 		line = strings.TrimSpace(line)
 
-		if strings.HasSuffix(line, "#") {
+		if strings.HasPrefix(line, "#") {
 			continue
 		}
 
@@ -85,7 +85,7 @@ func (info *ServerInfo) SaveData(data StoredData) error {
 	}(file)
 
 	for key, value := range data {
-		_, err := file.WriteString(key + "=" + value)
+		_, err := file.WriteString(key + "=" + value + "\n")
 		if err != nil {
 			continue
 		}
@@ -126,7 +126,7 @@ func locateServerJarFile(info *ServerInfo) (string, error) {
 	}
 
 	prompt := promptui.Select{
-		Label: "Select Jar-File runs the Server",
+		Label: "Select Jar-File that runs the Server",
 		Items: jarFiles,
 	}
 
@@ -168,6 +168,10 @@ func GetCurrentServerInfo() (*ServerInfo, error) {
 	}
 
 	out.JarFile = jarFile
+
+	// save server dir to ~/.mcsrvrc
+	_ = util.SaveServerPath(out.Path)
+
 	return out, nil
 }
 

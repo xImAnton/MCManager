@@ -10,6 +10,9 @@ import (
 // detect mc server in current directory, save ram in dotfile
 // generate `screen` command. manage autostarts
 
+// TODO: save ram
+// TODO: autostarts
+
 func main() {
 	app := &cli.App{
 		Name:  "MCManager",
