@@ -12,7 +12,7 @@ from click import echo
 
 from screen import get_running_servers, Screen
 
-RC_PATH = pathlib.Path("~/.mcsrvrc")
+RC_PATH = pathlib.Path("~/.mcsrvrc").expanduser()
 
 
 def check_ram_argument(i: str) -> str:
