@@ -11,7 +11,7 @@ import inquirer
 from click import echo
 import psutil
 
-from screen import get_running_servers, Screen
+from screen import get_running_screens, Screen
 
 
 def clean_path(p: pathlib.Path) -> pathlib.Path:
@@ -35,11 +35,12 @@ RC_PATH = pathlib.Path("~/.mcsrvrc").expanduser()
 
 def check_ram_argument(i: str) -> str:
     if re.match(r"[0-9]+G|M", i):
-        return f"-Xmx{i}"
+        return i
 
     if re.match(r"[0-9]+", i):
-        return f"-Xmx{i}G"
+        return f"{i}G"
 
+    echo(f"mcsrv: invalid ram value: {i}")
     raise click.exceptions.Exit(code=1)
 
 
@@ -68,9 +69,13 @@ class ServerInformation:
     def running(self) -> bool:
         return self.screen_handle is not None
 
+    @property
+    def autostarts(self) -> bool:
+        return self.data.get("autostart") == "true"
+
     @cached_property
     def screen_handle(self) -> Optional[Screen]:
-        for screen in get_running_servers():
+        for screen in get_running_screens():
             if screen.name == self.screen_name:
                 return screen
         return None
@@ -86,6 +91,13 @@ class ServerInformation:
     @property
     def screen_name(self):
         return f"mc-{self.id}"
+
+    @property
+    def ram(self) -> str:
+        return check_ram_argument(self.data.get("ram", "4G"))
+
+    def print(self, msg: str) -> None:
+        echo(f"mcsrv: {self.id}: {msg}")
 
     def register(self) -> None:
         if str(self.path) in self.get_registered_servers():
@@ -106,10 +118,13 @@ class ServerInformation:
         subprocess.run(["screen", "-S", self.screen_name, "-p", "0", "-X", "stuff", cmd])
 
     def start(self, ram: str = None) -> None:
-        ram = check_ram_argument(ram if ram else self.data.get("ram", "4G"))
+        if ram:
+            ram = check_ram_argument(ram)
+        else:
+            ram = self.ram
 
-        echo(f"starting server {self.id} with ram {ram}")
-        subprocess.run(["screen", "-d", "-S", self.screen_name, "-m", "java", ram, "-jar", self.jar.name])
+        self.print(f"starting with ram {ram}")
+        subprocess.run(["screen", "-d", "-S", self.screen_name, "-m", "java", "-Xmx" + ram, "-jar", self.jar.name])
 
     def _locate_jar(self) -> pathlib.Path:
         if "jar" in self.data:
@@ -120,7 +135,7 @@ class ServerInformation:
         jars = list(self.path.glob("*.jar"))
 
         if len(jars) == 0:
-            echo("no server found in the current directory")
+            self.print("no server found in the current directory")
             raise click.exceptions.Exit(code=1)
 
         if len(jars) == 1:

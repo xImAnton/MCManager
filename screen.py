@@ -18,7 +18,7 @@ class Screen:
         return self.__repr__()
 
 
-def get_running_servers() -> list[Screen]:
+def get_running_screens() -> list[Screen]:
     screen_dir = pathlib.Path(f"/run/screen/S-{os.getlogin()}")
 
     if not screen_dir.is_dir():
