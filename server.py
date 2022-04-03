@@ -107,6 +107,9 @@ class ServerInformation:
             f.write(f"{self.path}\n")
 
     def get_stats(self) -> tuple[float, float]:
+        if not self.running:
+            return 0, 0
+
         proc: psutil.Process = psutil.Process(self.screen_handle.pid).children()[0]
         proc.cpu_percent()
         return proc.cpu_percent(interval=0.5), round(proc.memory_info().rss / 1000000000, 2)
@@ -123,7 +126,7 @@ class ServerInformation:
         else:
             ram = self.ram
 
-        self.print(f"starting with ram {ram}")
+        self.print(f"starting with {ram}b RAM")
         subprocess.run(["screen", "-d", "-S", self.screen_name, "-m", "java", "-Xmx" + ram, "-jar", self.jar.name])
 
     def _locate_jar(self) -> pathlib.Path:
