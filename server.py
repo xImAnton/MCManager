@@ -138,8 +138,10 @@ class ServerInformation:
             j = self.path.joinpath(self.data["jar"])
             if j.is_file():
                 return j
+            self.print("saved jar-file not found! locating...")
 
         jars = list(self.path.glob("*.jar"))
+        self.print(str(self.path))
 
         if len(jars) == 0:
             self.print("no server found in the current directory")
