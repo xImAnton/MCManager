@@ -131,7 +131,7 @@ class ServerInformation:
 
         self.print(f"starting with {ram}B RAM")
         cmd = ["screen", "-d", "-S", self.screen_name, "-m", "java", "-Xmx" + ram, "-jar", self.jar.name]
-        subprocess.run(cmd)
+        subprocess.run(cmd, cwd=self.path.absolute())
 
     def _locate_jar(self) -> pathlib.Path:
         if "jar" in self.data:
