@@ -126,8 +126,12 @@ class ServerInformation:
         else:
             ram = self.ram
 
-        self.print(f"starting with {ram}b RAM")
-        subprocess.run(["screen", "-d", "-S", self.screen_name, "-m", "java", "-Xmx" + ram, "-jar", self.jar.name])
+        # invalidate screen handle
+        self.__dict__.pop("screen_handle", None)
+
+        self.print(f"starting with {ram}B RAM")
+        cmd = ["screen", "-d", "-S", self.screen_name, "-m", "java", "-Xmx" + ram, "-jar", self.jar.name]
+        subprocess.run(cmd)
 
     def _locate_jar(self) -> pathlib.Path:
         if "jar" in self.data:
