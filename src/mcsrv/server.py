@@ -1,6 +1,5 @@
 import os
 import pathlib
-import re
 import shlex
 import subprocess
 from functools import cached_property
@@ -8,62 +7,62 @@ from typing import Optional
 
 import click.exceptions
 import inquirer
-from click import echo
 import psutil
+from click import echo
 
-from screen import get_running_screens, Screen
-
-
-def clean_path(p: pathlib.Path) -> pathlib.Path:
-    out = []
-
-    for part in p.parts:
-        if part == "..":
-            out.pop()
-            continue
-
-        if part == ".":
-            continue
-
-        out.append(part)
-
-    return pathlib.Path("/").joinpath(*out)
-
+from .util import get_running_screens, Screen, clean_path, check_ram_argument
 
 RC_PATH = pathlib.Path("~/.mcsrvrc").expanduser()
 
 
-def check_ram_argument(i: str) -> str:
-    if re.match(r"[0-9]+G|M", i):
-        return i
-
-    if re.match(r"[0-9]+", i):
-        return f"{i}G"
-
-    echo(f"mcsrv: invalid ram value: {i}")
-    raise click.exceptions.Exit(code=1)
-
-
-class ServerInformation:
+class Server:
     @classmethod
-    def from_cwd(cls):
-        return ServerInformation(os.getcwd())
-
-    @classmethod
-    def get_registered_servers(cls) -> list[str]:
+    def get_cached_server_paths(cls) -> list[str]:
         if not RC_PATH.is_file():
             return []
 
         with RC_PATH.open("r") as f:
             return list(map(str.strip, f.readlines()))
 
-    def __init__(self, path: str):
+    @classmethod
+    def unregister_paths(cls, paths: list[str]) -> None:
+        if len(paths) == 0:
+            return
+
+        registered = set(cls.get_cached_server_paths())
+        to_remove = set(paths)
+
+        with RC_PATH.open("w") as f:
+            for valid_server in registered - to_remove:
+                f.write(f"{valid_server}\n")
+
+    @classmethod
+    def get_registered_servers(cls) -> list["Server"]:
+        paths = cls.get_cached_server_paths()
+        out = []
+        invalid = []
+
+        for p in paths:
+            try:
+                out.append(Server(p))
+            except FileNotFoundError:
+                echo(f"mcsrv: warn: server directory {p} not existing, removing it")
+                invalid.append(p)
+
+        cls.unregister_paths(invalid)
+
+        return out
+
+    def __init__(self, path: str) -> None:
         self.path: pathlib.Path = clean_path(pathlib.Path(path).absolute())
+
+        if not self.path.is_dir():
+            raise FileNotFoundError(f"invalid server path: {self.path}")
+
         self.data: dict[str, str] = {}
         self._load_data()
         self.jar: pathlib.Path = self._locate_jar()
         self.save_data()
-        self.register()
 
     @property
     def running(self) -> bool:
@@ -72,6 +71,11 @@ class ServerInformation:
     @property
     def autostarts(self) -> bool:
         return self.data.get("autostart") == "true"
+
+    @autostarts.setter
+    def autostarts(self, val: bool) -> None:
+        self.data["autostart"] = "true" if val else "false"
+        self.save_data()
 
     @cached_property
     def screen_handle(self) -> Optional[Screen]:
@@ -82,37 +86,55 @@ class ServerInformation:
 
     @property
     def id(self) -> str:
-        return self.path.name
+        return self.path.name.lower()
 
     @property
     def datafile(self) -> pathlib.Path:
-        return self.path.joinpath(".mcsrvmeta")
+        return self.path.joinpath("../../.mcsrvmeta")
 
     @property
-    def screen_name(self):
+    def screen_name(self) -> str:
         return f"mc-{self.id}"
 
     @property
     def ram(self) -> str:
         return check_ram_argument(self.data.get("ram", "4G"))
 
+    @ram.setter
+    def ram(self, val: str) -> None:
+        self.data["ram"] = check_ram_argument(val)
+        self.save_data()
+
     def print(self, msg: str) -> None:
         echo(f"mcsrv: {self.id}: {msg}")
 
-    def register(self) -> None:
-        if str(self.path) in self.get_registered_servers():
-            return
+    def register(self) -> "Server":
+        # check if my id is already saved in another path
+        servers = self.get_registered_servers()
 
+        for other in servers:
+            if other.id == self.id:
+                # same server
+                if str(other.path) == str(self.path):
+                    return self
+
+                # other server with same id
+                self.print(
+                    f"there is already a server with id {self.id} at {other.path}. rename this or that directory")
+                raise click.exceptions.Exit(code=1)
+
+        # append server if not
         with RC_PATH.open("a" if RC_PATH.is_file() else "w") as f:
             f.write(f"{self.path}\n")
+
+        return self
 
     def get_stats(self) -> tuple[float, float]:
         if not self.running:
             return 0, 0
 
         proc: psutil.Process = psutil.Process(self.screen_handle.pid).children()[0]
-        proc.cpu_percent()
-        return proc.cpu_percent(interval=0.5), round(proc.memory_info().rss / 1000000000, 2)
+        return proc.cpu_percent(interval=2.0), round(proc.memory_info().rss / 1000000000, 2)
 
     def send_command(self, cmd: str, execute: bool = True) -> None:
         if execute:
@@ -159,10 +181,10 @@ class ServerInformation:
         self.data["jar"] = answer["jar"].name
         return answer["jar"]
 
-    def open_console(self):
+    def open_console(self) -> None:
         os.system(shlex.join(["screen", "-x", str(self.screen_handle)]))
 
-    def save_data(self):
+    def save_data(self) -> None:
         with self.datafile.open("w") as f:
             for key, val in self.data.items():
                 f.write(f"{key}={val}\n")

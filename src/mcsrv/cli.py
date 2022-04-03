@@ -4,11 +4,11 @@ import os
 import click
 from click import echo
 
-from server import ServerInformation, check_ram_argument
+from .server import Server
 
 
-def get_server(ctx: click.Context) -> ServerInformation:
-    return ServerInformation(ctx.obj["SERVER_PATH"])
+def get_server(ctx: click.Context) -> Server:
+    return Server(ctx.obj["SERVER_PATH"]).register()
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
@@ -52,9 +52,7 @@ def start(ctx: click.Context, ram_: str, open_console: bool):
 
 @start.command(name="auto", help="start all servers that should be autostarted")
 def start_auto():
-    for server in ServerInformation.get_registered_servers():
-        server = ServerInformation(server)
-
+    for server in Server.get_registered_servers():
         if server.autostarts and not server.running:
             server.start()
 
@@ -88,6 +86,8 @@ def console(ctx: click.Context):
 @click.pass_context
 def info(ctx: click.Context):
     server = get_server(ctx)
+
+    server.print("measuring performance")
     cpu, ram_ = server.get_stats()
 
     server.print(f"""information:
@@ -117,8 +117,7 @@ def autostart(ctx: click.Context):
 @click.pass_context
 def autostart_on(ctx: click.Context):
     server = get_server(ctx)
-    server.data["autostart"] = "true"
-    server.save_data()
+    server.autostarts = True
     server.print("autostart has been enabled")
 
 
@@ -126,8 +125,7 @@ def autostart_on(ctx: click.Context):
 @click.pass_context
 def autostart_off(ctx: click.Context):
     server = get_server(ctx)
-    server.data["autostart"] = "false"
-    server.save_data()
+    server.autostarts = True
     server.print("autostart has been disabled")
 
 
@@ -141,24 +139,21 @@ def ram(ctx: click.Context, ram_value: str):
         server.print(f"currently allocated ram: {server.ram}")
         return
 
-    server.data["ram"] = check_ram_argument(ram_value)
-    server.save_data()
+    server.ram = ram_value
     server.print(f"set ram to {server.data['ram']}")
 
 
 @main.command(name="list", help="list all registered servers")
 def list_():
     echo("mcsrv: all servers:")
-    for server in ServerInformation.get_registered_servers():
-        server = ServerInformation(server)
+    for server in Server.get_registered_servers():
         echo(f"  {server.id} -> {server.path}")
 
 
 @main.command(help="list all running servers")
 def ps():
     echo("mcsrv: running servers:")
-    for server in ServerInformation.get_registered_servers():
-        server = ServerInformation(server)
+    for server in Server.get_registered_servers():
 
         if not server.running:
             continue
