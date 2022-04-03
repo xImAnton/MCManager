@@ -90,7 +90,7 @@ class Server:
 
     @property
     def datafile(self) -> pathlib.Path:
-        return self.path.joinpath("../../.mcsrvmeta")
+        return self.path.joinpath(".mcsrvmeta")
 
     @property
     def screen_name(self) -> str:
