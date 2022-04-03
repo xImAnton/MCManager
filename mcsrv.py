@@ -90,7 +90,7 @@ def info(ctx: click.Context):
     server = get_server(ctx)
     cpu, ram_ = server.get_stats()
 
-    server.print(f"""Information:
+    server.print(f"""information:
   ID:            {server.id}
   Path:          {server.path}
   Jar-File:      {server.jar}
@@ -122,7 +122,7 @@ def autostart_on(ctx: click.Context):
     server.print("autostart has been enabled")
 
 
-@autostart.command(name="off", help="enable autostart for the current server")
+@autostart.command(name="off", help="disable autostart for the current server")
 @click.pass_context
 def autostart_off(ctx: click.Context):
     server = get_server(ctx)
