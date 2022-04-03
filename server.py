@@ -169,6 +169,7 @@ class ServerInformation:
         self.data = {}
 
         if not self.datafile.is_file():
+            self.print("no .mcsrvmeta file found")
             return
 
         with self.datafile.open("r") as f:
