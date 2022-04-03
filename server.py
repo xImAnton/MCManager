@@ -55,7 +55,7 @@ class ServerInformation:
             return []
 
         with RC_PATH.open("r") as f:
-            return f.readlines()
+            return list(map(str.strip, f.readlines()))
 
     def __init__(self, path: str):
         self.path: pathlib.Path = clean_path(pathlib.Path(path).absolute())
