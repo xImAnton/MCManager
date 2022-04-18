@@ -1,4 +1,4 @@
 # MCSRV
-Manage your Minecraft Server with more comfort from the CLI
+Manage your Minecraft Server with a convenient CLI
 
 *More Documentation coming...*
