@@ -7,10 +7,13 @@ from functools import cached_property
 from typing import Optional
 
 import click.exceptions
+import colorama
 import inquirer
 import psutil
 from click import echo
+from colorama import Fore
 
+from .javaexecutable import JavaExecutable
 from .util import get_running_screens, Screen, clean_path, check_ram_argument
 
 RC_PATH = pathlib.Path("~/.mcsrvrc").expanduser()
@@ -47,7 +50,7 @@ class Server:
             try:
                 out.append(Server(p))
             except FileNotFoundError:
-                echo(f"mcsrv: warn: server directory {p} not existing, removing it")
+                echo(f"mcsrv: warn: {Fore.YELLOW}Server directory {p} not existing, removing it")
                 invalid.append(p)
 
         cls.unregister_paths(invalid)
@@ -58,7 +61,7 @@ class Server:
         self.path: pathlib.Path = clean_path(pathlib.Path(path).absolute())
 
         if not self.path.is_dir():
-            raise FileNotFoundError(f"invalid server path: {self.path}")
+            raise FileNotFoundError(f"Invalid server path: {self.path!r}")
 
         self.data: dict[str, str] = {}
         self._load_data()
@@ -74,19 +77,27 @@ class Server:
         return self.data.get("autostart") == "true"
 
     @property
-    def java_bin(self) -> str:
+    def java_bin_path(self) -> str:
         return self.data.get("java-bin", "java")
 
-    @java_bin.setter
-    def java_bin(self, val: str) -> None:
+    @java_bin_path.setter
+    def java_bin_path(self, val: str) -> None:
         exe = shutil.which(val)
 
         if not exe:
-            self.print(f"invalid java executable: {val}")
+            self.print(f"{Fore.RED}Invalid java executable: {val}")
             raise click.exceptions.Exit(code=1)
 
         self.data["java-bin"] = exe
         self.save_data()
+
+    @property
+    def java_executable(self) -> JavaExecutable:
+        return JavaExecutable(self.java_bin_path)
+
+    @java_executable.setter
+    def java_executable(self, val: JavaExecutable) -> None:
+        self.java_bin_path = val.path
 
     @autostarts.setter
     def autostarts(self, val: bool) -> None:
@@ -122,7 +133,7 @@ class Server:
         self.save_data()
 
     def print(self, msg: str) -> None:
-        echo(f"mcsrv: {self.id}: {msg}")
+        echo(f"mcsrv: {self.id}: {msg}{colorama.Style.RESET_ALL}")
 
     def register(self) -> "Server":
         # check if my id is already saved in another path
@@ -136,7 +147,7 @@ class Server:
 
                 # other server with same id
                 self.print(
-                    f"there is already a server with id {self.id} at {other.path}. rename this or that directory")
+                    f"{Fore.RED}There is already a server with id {self.id!r} at {other.path!r}. Rename this or that directory!")
                 raise click.exceptions.Exit(code=1)
 
         # append server if not
@@ -164,15 +175,15 @@ class Server:
         else:
             ram = self.ram
 
-        if shutil.which(self.java_bin) is None:
-            self.print(f"{self.java_bin}: executable not found")
+        if shutil.which(self.java_bin_path) is None:
+            self.print(f"{Fore.RED}{self.java_bin_path}: Executable not found")
             raise click.exceptions.Exit(code=1)
 
-        # invalidate screen handle
+        # invalidate screen handle which is a cached property
         self.__dict__.pop("screen_handle", None)
 
-        self.print(f"starting with {ram}B RAM")
-        cmd = ["screen", "-d", "-S", self.screen_name, "-m", self.java_bin, "-Xmx" + ram, "-jar", self.jar.name]
+        self.print(f"Starting with {ram}B RAM")
+        cmd = ["screen", "-d", "-S", self.screen_name, "-m", self.java_bin_path, "-Xmx" + ram, "-jar", self.jar.name]
         subprocess.run(cmd, cwd=self.path.absolute())
 
     def _locate_jar(self) -> pathlib.Path:
@@ -180,12 +191,13 @@ class Server:
             j = self.path.joinpath(self.data["jar"])
             if j.is_file():
                 return j
-            self.print("saved jar-file not found! locating...")
+
+            self.print(f"{Fore.YELLOW}Earlier used Jar-File not found! Locating...")
 
         jars = list(self.path.glob("*.jar"))
 
         if len(jars) == 0:
-            self.print("no server found in the current directory")
+            self.print(f"{Fore.RED}No server found in the current directory")
             raise click.exceptions.Exit(code=1)
 
         if len(jars) == 1:
@@ -212,7 +224,7 @@ class Server:
         self.data = {}
 
         if not self.datafile.is_file():
-            self.print("no .mcsrvmeta file found")
+            self.print(f"{Fore.YELLOW}No .mcsrvmeta file found")
             return
 
         with self.datafile.open("r") as f:

@@ -4,8 +4,10 @@ import os
 import click
 import inquirer
 from click import echo
+import colorama
+from colorama import Fore, Style, Back
 
-from .javaversion import JavaVersion
+from .javaexecutable import JavaExecutable
 from .server import Server
 
 
@@ -14,7 +16,7 @@ def get_server(ctx: click.Context) -> Server:
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
-@click.option("--dir", "-p", "server_path", help="set the directory of the current server", default=os.getcwd(),
+@click.option("--dir", "-p", "server_path", help="Set the directory in which to search for the server", default=os.getcwd(),
               type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.pass_context
 def main(ctx: click.Context, server_path: str):
@@ -22,11 +24,11 @@ def main(ctx: click.Context, server_path: str):
     ctx.obj["SERVER_PATH"] = server_path
 
 
-@main.group(help="start the current server", invoke_without_command=True)
+@main.group(help="Start the Server", invoke_without_command=True)
 @click.option("--ram", "-r", "ram_",
-              help="specifies how much ram this server is given (overrides default if specified)", default=None,
+              help="Specifies how much RAM this server is allocated on start (overrides default if specified)", default=None,
               type=click.STRING)
-@click.option("--console", "-c", "open_console", help="attach to the servers console after it started", is_flag=True,
+@click.option("--console", "-c", "open_console", help="Attach to the servers console after start", is_flag=True,
               default=False)
 @click.pass_context
 def start(ctx: click.Context, ram_: str, open_console: bool):
@@ -36,75 +38,79 @@ def start(ctx: click.Context, ram_: str, open_console: bool):
     server = get_server(ctx)
 
     if server.running:
-        server.print("server is already running")
+        server.print(f"{Fore.YELLOW}Server is already running")
         return
 
     server.start(ram=ram_)
 
     if not server.running:
-        server.print("error while starting")
+        server.print(f"{Fore.RED}An unknown error occurred while starting the Server")
         return
 
-    server.print("successfully started")
+    server.print(f"{Fore.GREEN}Successfully started the Server")
 
-    if open_console:
-        server.print("attaching to console")
-        server.open_console()
+    if not open_console:
+        server.print(f"View the console with {Back.BLUE}{Fore.WHITE}mcsrv console")
+        return
+
+    server.print("Attaching to console")
+    server.open_console()
 
 
-@start.command(name="auto", help="start all servers that should be autostarted")
+@start.command(name="auto", help="Start all Servers that should be autostarted")
 def start_auto():
     for server in Server.get_registered_servers():
         if server.autostarts and not server.running:
             server.start()
 
 
-@main.command(help="stop the current server")
+@main.command(help="Stop the Server")
 @click.pass_context
 def stop(ctx):
     server = get_server(ctx)
 
     if not server.running:
-        server.print("server is not running")
+        server.print(f"{Fore.YELLOW}Server is not running")
         return
 
     server.send_command("stop")
-    server.print("stopping")
+    server.print("Stopping...")
 
 
-@main.command(help="show the console of the current server")
+@main.command(help="Open the Server console")
 @click.pass_context
 def console(ctx: click.Context):
     server = get_server(ctx)
 
     if not server.running:
-        server.print("server needs to be started first")
+        server.print(f"{Fore.YELLOW}Server needs to be started first")
         return
 
     server.open_console()
 
 
-@main.command(help="show information about the current server")
+@main.command(help="Show information about the Server")
 @click.pass_context
 def info(ctx: click.Context):
     server = get_server(ctx)
 
-    server.print("measuring performance")
+    server.print("Measuring performance...")
     cpu, ram_ = server.get_stats()
 
-    server.print(f"""information:
-  ID:            {server.id}
-  Path:          {server.path}
-  Jar-File:      {server.jar}
-  Running:       {server.running}
-  Screen-Handle: {server.screen_handle}
-  Max-RAM:       {server.ram}
-  CPU-Usage:     {cpu}%
-  RAM-Usage:     {ram_}GB
-  Autostart:     {server.autostarts}""")
+    server.print(f"""Information:
+  {Style.BRIGHT}ID:{Style.RESET_ALL}            {server.id}
+  {Style.BRIGHT}Path:{Style.RESET_ALL}          {server.path}
+  {Style.BRIGHT}Jar-File:{Style.RESET_ALL}      {server.jar}
+  {Style.BRIGHT}Running:{Style.RESET_ALL}       {server.running}
+  {Style.BRIGHT}Screen-Handle:{Style.RESET_ALL} {server.screen_handle}
+  {Style.BRIGHT}Max-RAM:{Style.RESET_ALL}       {server.ram}
+  {Style.BRIGHT}CPU-Usage:{Style.RESET_ALL}     {cpu}%
+  {Style.BRIGHT}RAM-Usage:{Style.RESET_ALL}     {ram_}GB
+  {Style.BRIGHT}Autostart:{Style.RESET_ALL}     {server.autostarts}
+  {Style.BRIGHT}Java-Version:{Style.RESET_ALL}  {server.java_executable}""")
 
 
-@main.group(help="get/set whether this server is started with the system", invoke_without_command=True)
+@main.group(help="Get/Set whether the Server is started with the system", invoke_without_command=True)
 @click.pass_context
 def autostart(ctx: click.Context):
     if ctx.invoked_subcommand is not None:
@@ -112,102 +118,92 @@ def autostart(ctx: click.Context):
 
     server = get_server(ctx)
     server.print(
-        f"autostart is currently {'enabled' if server.data.get('autostart', 'false').lower() == 'true' else 'disabled'}")
+        f"Autostart is currently {Style.BRIGHT}{'enabled' if server.data.get('autostart', 'false').lower() == 'true' else 'disabled'}")
 
 
-@autostart.command(name="on", help="enable autostart for the current server")
+@autostart.command(name="on", help="Enable autostart for the Server")
 @click.pass_context
 def autostart_on(ctx: click.Context):
     server = get_server(ctx)
     server.autostarts = True
-    server.print("autostart has been enabled")
+    server.print(f"Autostart has been {Style.BRIGHT}enabled")
 
 
-@autostart.command(name="off", help="disable autostart for the current server")
+@autostart.command(name="off", help="Disable autostart for the Server")
 @click.pass_context
 def autostart_off(ctx: click.Context):
     server = get_server(ctx)
     server.autostarts = False
-    server.print("autostart has been disabled")
+    server.print(f"Autostart has been {Style.BRIGHT}disabled")
 
 
-@main.command(help="get/set how much ram this server is allocated")
+@main.command(help="Get/Set how much RAM this Server is allocated")
 @click.argument("ram_value", type=click.STRING, required=False, nargs=1)
 @click.pass_context
 def ram(ctx: click.Context, ram_value: str):
     server = get_server(ctx)
 
     if ram_value is None:
-        server.print(f"currently allocated ram: {server.ram}")
+        server.print(f"Currently allocated RAM: {Style.BRIGHT}{server.ram}")
         return
 
     server.ram = ram_value
-    server.print(f"set ram to {server.data['ram']}")
+    server.print(f"Set RAM to {Style.BRIGHT}{server.data['ram']}")
 
 
-@main.command(name="list", help="list all registered servers")
-def list_():
-    echo("mcsrv: all servers:")
+@main.command(name="list", help="Get a list of running Servers")
+@click.option("--all", "-a", "list_all", help="List all Servers (including offline Servers)", is_flag=True,
+              default=False)
+def list_(list_all: bool):
+    # TODO: print as table with offline/online indicator
+
     for server in Server.get_registered_servers():
-        echo(f"  {server.id} -> {server.path}")
+        if list_all or server.running:
+            echo(f"  {server.id} -> {server.path}")
 
 
-@main.command(help="list all running servers")
-def ps():
-    echo("mcsrv: running servers:")
-    for server in Server.get_registered_servers():
-
-        if not server.running:
-            continue
-
-        echo(f"  {server.id}")
-
-
-@main.group(help="manage java versions", invoke_without_command=True)
+@main.group(help="Manage Java Versions", invoke_without_command=True)
 @click.pass_context
 def java(ctx: click.Context):
     if ctx.invoked_subcommand is not None:
         return
 
-    versions = JavaVersion.get_known_java_installations()
-
-    echo("registered java installations:")
-    for j in versions:
+    echo("Registered Java installations:")
+    for j in JavaExecutable.get_known_java_installations():
         echo(f"  {j.version} ({j.path})")
 
 
-@java.command(name="add")
+@java.command(name="add", help="Register a Java Version")
 @click.argument("path", type=click.STRING, required=True, nargs=1)
-@click.pass_context
-def add_java_version(ctx: click.Context, path: str):
+def add_java_version(path: str):
     try:
-        new_java = JavaVersion(path).register()
+        new_java = JavaExecutable(path).register()
     except ValueError:
         raise click.exceptions.Exit(code=1)
 
-    echo(f"java at {new_java.path!r} (version: {new_java.version!r}) has been registered")
+    echo(f"{new_java} has been registered")
 
 
-@java.command(name="set")
+@java.command(name="set", help="Set the Java Version of the Server")
 @click.argument("java_version_path", type=click.STRING, required=False, nargs=1)
 @click.pass_context
 def set_java_version(ctx: click.Context, java_version_path: str):
     server = get_server(ctx)
 
     if java_version_path is None:
-        installations = JavaVersion.get_known_java_installations()
+        installations = JavaExecutable.get_known_java_installations()
 
         if len(installations) == 0:
-            echo("no registered java installations. please register one or pass the path as an argument")
+            echo(f"{Fore.RED}There are no registered Java installations")
             raise click.exceptions.Exit(code=1)
 
         if len(installations) == 1:
-            echo("nothing changed, there is only one registered java version. if you want to run this server on another, register it or pass the path as an argument")
+            echo(f"{Fore.YELLOW}Nothing changed, there is only one registered Java version ({installations[0]})")
             return
 
         options = [(f"{j.version} ({j.path})", j.path) for j in installations]
 
-        answer = inquirer.prompt([inquirer.List("java_ver", message="Which java version should be used?", choices=options)])
+        answer = inquirer.prompt([inquirer.List("java_ver", message="Which Java version should be used?", choices=options)])
 
         if not answer:
             raise click.exceptions.Exit(code=1)
@@ -215,14 +211,15 @@ def set_java_version(ctx: click.Context, java_version_path: str):
         java_version_path = answer["java_ver"]
 
     try:
-        new_java = JavaVersion(java_version_path).register()
+        new_java = JavaExecutable(java_version_path).register()
     except ValueError:
         raise click.exceptions.Exit(code=1)
 
-    server.java_bin = new_java.path
+    server.java_executable = new_java
+    server.print(f"Java version set to {Style.BRIGHT}{new_java.version!r}")
 
     if server.running:
-        server.print("note that you have to restart the server for changes to apply")
+        server.print("Note that you have to restart the Server for changes to apply")
 
 
 if __name__ == '__main__':

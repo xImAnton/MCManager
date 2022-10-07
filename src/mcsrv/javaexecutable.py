@@ -5,13 +5,14 @@ import shutil
 import subprocess
 
 from click import echo
+from colorama import Fore
 
 RC_PATH = pathlib.Path("~/.javaversions").expanduser()
 
 
-class JavaVersion:
+class JavaExecutable:
     @classmethod
-    def get_known_java_installations(cls) -> list["JavaVersion"]:
+    def get_known_java_installations(cls) -> list["JavaExecutable"]:
         if not RC_PATH.is_file():
             return []
 
@@ -25,7 +26,7 @@ class JavaVersion:
     def get_version(self) -> str:
         path = shutil.which(self.path)
         if not path:
-            echo(f"file {self.path!r} is not a valid java installation")
+            echo(f"{Fore.RED}File {self.path!r} is not a valid java installation")
             raise ValueError(f"file {self.path!r} is not a valid java installation")
 
         self.path = path
@@ -50,3 +51,9 @@ class JavaVersion:
             f.write(f"{self.path}\n")
 
         return self
+
+    def __str__(self):
+        return f"Java Version {self.version!r} at {self.path!r}"
+
+    def __repr__(self):
+        return f"<JavaExecutable version={self.version!r} path={self.path!r}>"

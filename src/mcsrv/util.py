@@ -4,6 +4,7 @@ import re
 
 import click
 from click import echo
+from colorama import Fore
 
 
 class Screen:
@@ -39,7 +40,7 @@ def check_ram_argument(i: str) -> str:
     if XMX_G.match(i):
         return f"{i}G"
 
-    echo(f"mcsrv: invalid ram value: {i}")
+    echo(f"mcsrv: {Fore.RED}Invalid RAM value: {i}")
     raise click.exceptions.Exit(code=1)
 
 
