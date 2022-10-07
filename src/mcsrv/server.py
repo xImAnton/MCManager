@@ -1,6 +1,7 @@
 import os
 import pathlib
 import shlex
+import shutil
 import subprocess
 from functools import cached_property
 from typing import Optional
@@ -71,6 +72,21 @@ class Server:
     @property
     def autostarts(self) -> bool:
         return self.data.get("autostart") == "true"
+
+    @property
+    def java_bin(self) -> str:
+        return self.data.get("java-bin", "java")
+
+    @java_bin.setter
+    def java_bin(self, val: str) -> None:
+        exe = shutil.which(val)
+
+        if not exe:
+            self.print(f"invalid java executable: {val}")
+            raise click.exceptions.Exit(code=1)
+
+        self.data["java-bin"] = exe
+        self.save_data()
 
     @autostarts.setter
     def autostarts(self, val: bool) -> None:
@@ -148,11 +164,15 @@ class Server:
         else:
             ram = self.ram
 
+        if shutil.which(self.java_bin) is None:
+            self.print(f"{self.java_bin}: executable not found")
+            raise click.exceptions.Exit(code=1)
+
         # invalidate screen handle
         self.__dict__.pop("screen_handle", None)
 
         self.print(f"starting with {ram}B RAM")
-        cmd = ["screen", "-d", "-S", self.screen_name, "-m", "java", "-Xmx" + ram, "-jar", self.jar.name]
+        cmd = ["screen", "-d", "-S", self.screen_name, "-m", self.java_bin, "-Xmx" + ram, "-jar", self.jar.name]
         subprocess.run(cmd, cwd=self.path.absolute())
 
     def _locate_jar(self) -> pathlib.Path:
@@ -163,7 +183,6 @@ class Server:
             self.print("saved jar-file not found! locating...")
 
         jars = list(self.path.glob("*.jar"))
-        self.print(str(self.path))
 
         if len(jars) == 0:
             self.print("no server found in the current directory")

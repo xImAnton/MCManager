@@ -2,8 +2,10 @@
 import os
 
 import click
+import inquirer
 from click import echo
 
+from .javaversion import JavaVersion
 from .server import Server
 
 
@@ -125,7 +127,7 @@ def autostart_on(ctx: click.Context):
 @click.pass_context
 def autostart_off(ctx: click.Context):
     server = get_server(ctx)
-    server.autostarts = True
+    server.autostarts = False
     server.print("autostart has been disabled")
 
 
@@ -159,6 +161,68 @@ def ps():
             continue
 
         echo(f"  {server.id}")
+
+
+@main.group(help="manage java versions", invoke_without_command=True)
+@click.pass_context
+def java(ctx: click.Context):
+    if ctx.invoked_subcommand is not None:
+        return
+
+    versions = JavaVersion.get_known_java_installations()
+
+    echo("registered java installations:")
+    for j in versions:
+        echo(f"  {j.version} ({j.path})")
+
+
+@java.command(name="add")
+@click.argument("path", type=click.STRING, required=True, nargs=1)
+@click.pass_context
+def add_java_version(ctx: click.Context, path: str):
+    try:
+        new_java = JavaVersion(path).register()
+    except ValueError:
+        raise click.exceptions.Exit(code=1)
+
+    echo(f"java at {new_java.path!r} (version: {new_java.version!r}) has been registered")
+
+
+@java.command(name="set")
+@click.argument("java_version_path", type=click.STRING, required=False, nargs=1)
+@click.pass_context
+def set_java_version(ctx: click.Context, java_version_path: str):
+    server = get_server(ctx)
+
+    if java_version_path is None:
+        installations = JavaVersion.get_known_java_installations()
+
+        if len(installations) == 0:
+            echo("no registered java installations. please register one or pass the path as an argument")
+            raise click.exceptions.Exit(code=1)
+
+        if len(installations) == 1:
+            echo("nothing changed, there is only one registered java version. if you want to run this server on another, register it or pass the path as an argument")
+            return
+
+        options = [(f"{j.version} ({j.path})", j.path) for j in installations]
+
+        answer = inquirer.prompt([inquirer.List("java_ver", message="Which java version should be used?", choices=options)])
+
+        if not answer:
+            raise click.exceptions.Exit(code=1)
+
+        java_version_path = answer["java_ver"]
+
+    try:
+        new_java = JavaVersion(java_version_path).register()
+    except ValueError:
+        raise click.exceptions.Exit(code=1)
+
+    server.java_bin = new_java.path
+
+    if server.running:
+        server.print("note that you have to restart the server for changes to apply")
 
 
 if __name__ == '__main__':
