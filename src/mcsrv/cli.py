@@ -47,7 +47,7 @@ def start(ctx: click.Context, ram_: str, open_console: bool):
         server.print(f"{Fore.RED}An unknown error occurred while starting the Server")
         return
 
-    server.print(f"{Fore.GREEN}Successfully started the Server")
+    server.print(f"Successfully started the Server")
 
     if not open_console:
         server.print(f"View the console with {Back.BLUE}{Fore.WHITE}mcsrv console")
