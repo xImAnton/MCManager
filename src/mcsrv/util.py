@@ -65,5 +65,5 @@ printed_warnings = []
 
 def print_warning(s: str, id_: str):
     if id_ not in printed_warnings:
-        print(s)
+        click.echo(s)
         printed_warnings.append(id_)
