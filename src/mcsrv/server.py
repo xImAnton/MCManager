@@ -191,6 +191,12 @@ class Server:
             self.print(f"{Fore.RED}{self.java_bin_path}: Executable not found")
             raise click.exceptions.Exit(code=1)
 
+        # check if eula exists
+        eula = pathlib.Path(self.path, "eula.txt")
+        if not eula.is_file():
+            with eula.open("w") as f:
+                f.write("eula=true")
+
         # invalidate screen handle which is a cached property
         self.__dict__.pop("screen_handle", None)
 
