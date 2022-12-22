@@ -58,3 +58,12 @@ def clean_path(p: pathlib.Path) -> pathlib.Path:
         out.append(part)
 
     return pathlib.Path("/").joinpath(*out)
+
+
+printed_warnings = []
+
+
+def print_warning(s: str, id_: str):
+    if id_ not in printed_warnings:
+        print(s)
+        printed_warnings.append(id_)

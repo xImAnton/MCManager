@@ -13,8 +13,8 @@ import psutil
 from click import echo
 from colorama import Fore, Style, Back
 
-from .javaexecutable import JavaExecutable, prompt_java_version
-from .util import get_running_screens, Screen, clean_path, check_ram_argument
+from .javaexecutable import JavaExecutable
+from .util import get_running_screens, Screen, clean_path, check_ram_argument, print_warning
 
 RC_PATH = pathlib.Path("~/.mcsrv").expanduser()
 
@@ -80,8 +80,8 @@ class Server:
     def java_bin_path(self) -> str:
         if "java-bin" not in self.data or not shutil.which(self.data["java-bin"]):
             ver = JavaExecutable.get_default_version()
-            print(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use{Back.BLUE}"
-                  f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually")
+            print_warning(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use {Back.BLUE}"
+                          f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually", "use_def_java")
             return ver.path
 
         return self.data["java-bin"]
@@ -90,8 +90,8 @@ class Server:
     def java_executable(self) -> JavaExecutable:
         if "java-bin" not in self.data or not shutil.which(self.data["java-bin"]):
             ver = JavaExecutable.get_default_version()
-            print(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use{Back.BLUE}"
-                  f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually")
+            print_warning(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use {Back.BLUE}"
+                  f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually", "use_def_java")
             return ver
 
         return JavaExecutable(self.java_bin_path)
