@@ -16,7 +16,7 @@ from colorama import Fore
 from .javaexecutable import JavaExecutable
 from .util import get_running_screens, Screen, clean_path, check_ram_argument
 
-RC_PATH = pathlib.Path("~/.mcsrvrc").expanduser()
+RC_PATH = pathlib.Path("~/.mcsrv").expanduser()
 
 
 class Server:
