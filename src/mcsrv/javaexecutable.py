@@ -3,21 +3,57 @@ import pathlib
 import shlex
 import shutil
 import subprocess
+from typing import Union
 
+import click
+import inquirer
 from click import echo
-from colorama import Fore
+from colorama import Fore, Back
 
 RC_PATH = pathlib.Path("~/.javaversions").expanduser()
 
 
+def prompt_java_version():
+    installations = JavaExecutable.get_known_java_installations()
+
+    if len(installations) == 0:
+        echo(f"{Fore.RED}There are no registered Java installations")
+        raise click.exceptions.Exit(code=1)
+
+    if len(installations) == 1:
+        echo(f"{Fore.YELLOW}Nothing changed, there is only one registered Java version ({installations[0]})")
+        return
+
+    options = [(f"{j.version} ({j.path})", j.path) for j in installations]
+
+    answer = inquirer.prompt([inquirer.List("java_ver", message="Which Java version should be used?", choices=options)])
+
+    if not answer:
+        raise click.exceptions.Exit(code=1)
+
+    return answer["java_ver"]
+
+
 class JavaExecutable:
     @classmethod
-    def get_known_java_installations(cls) -> list["JavaExecutable"]:
+    def get_known_java_installations(cls, return_paths: bool = False) -> list[Union["JavaExecutable", str]]:
         if not RC_PATH.is_file():
             return []
 
         with RC_PATH.open("r") as f:
-            return list(map(cls, f.readlines()))
+            map_func = str.strip if return_paths else cls
+            return list(map(map_func, f.readlines()))
+
+    @classmethod
+    def get_default_version(cls) -> "JavaExecutable":
+        installs = cls.get_known_java_installations(True)
+
+        if len(installs) == 0:
+            print(f"{Fore.RED}No registered java versions. Set the default version using"
+                  f"{Fore.WHITE}{Back.BLUE}mcsrv java set")
+            raise click.exceptions.Exit(code=1)
+
+        return JavaExecutable(installs[0])
 
     def __init__(self, path: str):
         self.path: str = path.strip()

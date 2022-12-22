@@ -2,12 +2,10 @@
 import os
 
 import click
-import inquirer
 from click import echo
-import colorama
 from colorama import Fore, Style, Back
 
-from .javaexecutable import JavaExecutable
+from .javaexecutable import JavaExecutable, prompt_java_version
 from .server import Server
 
 
@@ -191,24 +189,7 @@ def set_java_version(ctx: click.Context, java_version_path: str):
     server = get_server(ctx)
 
     if java_version_path is None:
-        installations = JavaExecutable.get_known_java_installations()
-
-        if len(installations) == 0:
-            echo(f"{Fore.RED}There are no registered Java installations")
-            raise click.exceptions.Exit(code=1)
-
-        if len(installations) == 1:
-            echo(f"{Fore.YELLOW}Nothing changed, there is only one registered Java version ({installations[0]})")
-            return
-
-        options = [(f"{j.version} ({j.path})", j.path) for j in installations]
-
-        answer = inquirer.prompt([inquirer.List("java_ver", message="Which Java version should be used?", choices=options)])
-
-        if not answer:
-            raise click.exceptions.Exit(code=1)
-
-        java_version_path = answer["java_ver"]
+        java_version_path = prompt_java_version()
 
     try:
         new_java = JavaExecutable(java_version_path).register()

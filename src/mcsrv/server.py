@@ -11,9 +11,9 @@ import colorama
 import inquirer
 import psutil
 from click import echo
-from colorama import Fore
+from colorama import Fore, Style, Back
 
-from .javaexecutable import JavaExecutable
+from .javaexecutable import JavaExecutable, prompt_java_version
 from .util import get_running_screens, Screen, clean_path, check_ram_argument
 
 RC_PATH = pathlib.Path("~/.mcsrv").expanduser()
@@ -78,7 +78,23 @@ class Server:
 
     @property
     def java_bin_path(self) -> str:
-        return self.data.get("java-bin", "java")
+        if "java-bin" not in self.data or not shutil.which(self.data["java-bin"]):
+            ver = JavaExecutable.get_default_version()
+            print(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use{Back.BLUE}"
+                  f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually")
+            return ver.path
+
+        return self.data["java-bin"]
+
+    @property
+    def java_executable(self) -> JavaExecutable:
+        if "java-bin" not in self.data or not shutil.which(self.data["java-bin"]):
+            ver = JavaExecutable.get_default_version()
+            print(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use{Back.BLUE}"
+                  f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually")
+            return ver
+
+        return JavaExecutable(self.java_bin_path)
 
     @java_bin_path.setter
     def java_bin_path(self, val: str) -> None:
@@ -90,10 +106,6 @@ class Server:
 
         self.data["java-bin"] = exe
         self.save_data()
-
-    @property
-    def java_executable(self) -> JavaExecutable:
-        return JavaExecutable(self.java_bin_path)
 
     @java_executable.setter
     def java_executable(self, val: JavaExecutable) -> None:
