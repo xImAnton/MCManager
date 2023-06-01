@@ -2,11 +2,14 @@
 import os
 
 import click
+import dispenser
 from click import echo
 from colorama import Fore, Style, Back
+from dispenser.impl import VERSION_PROVIDERS
 
 from .javaexecutable import JavaExecutable, prompt_java_version
 from .server import Server
+from .util import format_server_info
 
 
 def get_server(ctx: click.Context) -> Server:
@@ -14,7 +17,8 @@ def get_server(ctx: click.Context) -> Server:
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
-@click.option("--dir", "-p", "server_path", help="Set the directory in which to search for the server", default=os.getcwd(),
+@click.option("--dir", "-p", "server_path", help="Set the directory in which to search for the server",
+              default=os.getcwd(),
               type=click.Path(exists=True, file_okay=False, dir_okay=True))
 @click.pass_context
 def main(ctx: click.Context, server_path: str):
@@ -22,9 +26,43 @@ def main(ctx: click.Context, server_path: str):
     ctx.obj["SERVER_PATH"] = server_path
 
 
+@main.command(name="create", help="Create a new server")
+@click.argument("name", type=click.STRING, required=True, nargs=1)
+@click.argument("version", type=click.STRING, required=False, nargs=-1)
+def create(name: str, version: tuple[str]):
+    dispenser.init()
+
+    if os.path.exists(name) and not (os.path.isdir(name) and not os.listdir(name)):
+        print("directory/file already exists")
+        return
+
+    if not os.path.isdir(name):
+        os.mkdir(name)
+
+    avail = None
+
+    if len(version) == 0:
+        avail = VERSION_PROVIDERS.keys()
+    elif len(version) == 1:
+        avail = VERSION_PROVIDERS[version[0]].get_major_versions()
+    elif len(version) == 2:
+        avail = VERSION_PROVIDERS[version[0]].get_minor_versions(version[1])
+
+    if avail is not None:
+        print(f"available versions: {' '.join(avail)}")
+        return
+
+    dispenser.dispense(version[0], version[1], version[2], name)
+
+    s = Server(name).register()
+
+    s.print("server created")
+
+
 @main.group(help="Start the Server", invoke_without_command=True)
 @click.option("--ram", "-r", "ram_",
-              help="Specifies how much RAM this server is allocated on start (overrides default if specified)", default=None,
+              help="Specifies how much RAM this server is allocated on start (overrides default if specified)",
+              default=None,
               type=click.STRING)
 @click.option("--console", "-c", "open_console", help="Attach to the servers console after start", is_flag=True,
               default=False)
@@ -95,17 +133,19 @@ def info(ctx: click.Context):
     server.print("Measuring performance...")
     cpu, ram_ = server.get_stats()
 
-    server.print(f"""Information:
-  {Style.BRIGHT}ID:{Style.RESET_ALL}            {server.id}
-  {Style.BRIGHT}Path:{Style.RESET_ALL}          {server.path}
-  {Style.BRIGHT}Jar-File:{Style.RESET_ALL}      {server.jar}
-  {Style.BRIGHT}Running:{Style.RESET_ALL}       {server.running}
-  {Style.BRIGHT}Screen-Handle:{Style.RESET_ALL} {server.screen_handle}
-  {Style.BRIGHT}Max-RAM:{Style.RESET_ALL}       {server.ram}
-  {Style.BRIGHT}CPU-Usage:{Style.RESET_ALL}     {cpu}%
-  {Style.BRIGHT}RAM-Usage:{Style.RESET_ALL}     {ram_}GB
-  {Style.BRIGHT}Autostart:{Style.RESET_ALL}     {server.autostarts}
-  {Style.BRIGHT}Java-Version:{Style.RESET_ALL}  {server.java_executable}""")
+    server.print(format_server_info({
+        "ID": server.id,
+        "Path": server.path,
+        "Launch-Method": server.launch_method[0],
+        "Launch-Arguments": server.launch_method[1],
+        "Running": server.running,
+        "Screen-Handle": server.screen_handle,
+        "Allocated RAM": f"{server.ram}B",
+        "CPU-Usage": f"{cpu}%",
+        "RAM-Usage": f"{ram_}GB",
+        "Autostart": server.autostarts,
+        "Java-Version": server.java_executable
+    }))
 
 
 @main.group(help="Get/Set whether the Server is started with the system", invoke_without_command=True)

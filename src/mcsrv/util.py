@@ -4,7 +4,7 @@ import re
 
 import click
 from click import echo
-from colorama import Fore
+from colorama import Fore, Style
 
 
 class Screen:
@@ -67,3 +67,14 @@ def print_warning(s: str, id_: str):
     if id_ not in printed_warnings:
         click.echo(s)
         printed_warnings.append(id_)
+
+
+def format_server_info(v: dict[str, str]) -> str:
+    longest_key = max(map(len, v))
+
+    out = "Information:"
+
+    for key, val in v.items():
+        out += f"\n  {Style.BRIGHT}{key}:{Style.RESET_ALL}{' ' * ((longest_key - len(key)) + 3)}{val}"
+
+    return out

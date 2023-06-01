@@ -8,12 +8,12 @@ from typing import Optional
 
 import click.exceptions
 import colorama
-import inquirer
 import psutil
 from click import echo
-from colorama import Fore, Style, Back
+from colorama import Fore, Back
 
 from .javaexecutable import JavaExecutable
+from .launch import LaunchMethod, LaunchMethodManager
 from .util import get_running_screens, Screen, clean_path, check_ram_argument, print_warning
 
 RC_PATH = pathlib.Path("~/.mcsrv").expanduser()
@@ -50,7 +50,7 @@ class Server:
             try:
                 out.append(Server(p))
             except FileNotFoundError:
-                echo(f"mcsrv: warn: {Fore.YELLOW}Server directory {p} not existing, removing it")
+                echo(f"mcsrv: warn: {Fore.YELLOW}Server directory {p} not existing, removing it{Fore.RESET}")
                 invalid.append(p)
 
         cls.unregister_paths(invalid)
@@ -64,8 +64,9 @@ class Server:
             raise FileNotFoundError(f"Invalid server path: {self.path!r}")
 
         self.data: dict[str, str] = {}
+
         self._load_data()
-        self.jar: pathlib.Path = self._locate_jar()
+        self.launch_method_instance: LaunchMethod = self.ensure_valid_launch_method()
         self.save_data()
 
     @property
@@ -77,23 +78,22 @@ class Server:
         return self.data.get("autostart") == "true"
 
     @property
+    def launch_method(self) -> tuple[str, str]:
+        return self.data.get("launch-method", None), self.data.get("launch-args", None)
+
+    @property
     def java_bin_path(self) -> str:
         if "java-bin" not in self.data or not shutil.which(self.data["java-bin"]):
             ver = JavaExecutable.get_default_version()
-            print_warning(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use {Back.BLUE}"
-                          f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually", "use_def_java")
+            print_warning(f"{Fore.YELLOW}Using default Java Version ({ver.version}). Use {Back.BLUE}"
+                          f"{Fore.WHITE}mcsrv java set{Back.RESET}{Fore.YELLOW} to set the version manually{Fore.RESET}",
+                          "use_def_java")
             return ver.path
 
         return self.data["java-bin"]
 
     @property
     def java_executable(self) -> JavaExecutable:
-        if "java-bin" not in self.data or not shutil.which(self.data["java-bin"]):
-            ver = JavaExecutable.get_default_version()
-            print_warning(f"{Fore.YELLOW}Using the default Java Version ({ver.version}). Use {Back.BLUE}"
-                  f"{Fore.WHITE}mcsrv java set {Back.RESET}{Fore.YELLOW} to set the version manually", "use_def_java")
-            return ver
-
         return JavaExecutable(self.java_bin_path)
 
     @java_bin_path.setter
@@ -114,6 +114,13 @@ class Server:
     @autostarts.setter
     def autostarts(self, val: bool) -> None:
         self.data["autostart"] = "true" if val else "false"
+        self.save_data()
+
+    @launch_method.setter
+    def launch_method(self, v: tuple[str, str]) -> None:
+        method, args = v
+        self.data["launch-method"] = method if method in ["jar", "forge"] else None
+        self.data["launch-args"] = args
         self.save_data()
 
     @cached_property
@@ -200,35 +207,26 @@ class Server:
         # invalidate screen handle which is a cached property
         self.__dict__.pop("screen_handle", None)
 
-        self.print(f"Starting with {ram}B RAM")
-        cmd = ["screen", "-d", "-S", self.screen_name, "-m", self.java_bin_path, "-Xmx" + ram, "-jar", self.jar.name]
+        self.print(f"Starting {self.launch_method_instance.METHOD} with {ram}B RAM")
+        cmd = ["screen", "-d", "-S", self.screen_name, "-m",
+               *self.launch_method_instance.get_command(self.java_bin_path, ram)]
         subprocess.run(cmd, cwd=self.path.absolute())
 
-    def _locate_jar(self) -> pathlib.Path:
-        if "jar" in self.data:
-            j = self.path.joinpath(self.data["jar"])
-            if j.is_file():
-                return j
+    def ensure_valid_launch_method(self) -> LaunchMethod:
+        method = LaunchMethodManager.get_method(self)
 
-            self.print(f"{Fore.YELLOW}Earlier used Jar-File not found! Locating...")
+        if method and method.is_valid():
+            return method
 
-        jars = list(self.path.glob("*.jar"))
+        method = LaunchMethodManager.find_matching_method(self)
 
-        if len(jars) == 0:
-            self.print(f"{Fore.RED}No server found in the current directory")
-            raise click.exceptions.Exit(code=1)
+        if not method:
+            self.print("no server start method detected")
+            raise click.exceptions.Exit(1)
 
-        if len(jars) == 1:
-            self.data["jar"] = jars[0].name
-            return jars[0]
+        self.launch_method = method.to_tuple()
 
-        answer = inquirer.prompt([inquirer.List("jar", message="Which .jar runs your server?", choices=jars)])
-
-        if not answer:
-            raise click.exceptions.Exit(code=1)
-
-        self.data["jar"] = answer["jar"].name
-        return answer["jar"]
+        return method
 
     def open_console(self) -> None:
         os.system(shlex.join(["screen", "-x", str(self.screen_handle)]))
