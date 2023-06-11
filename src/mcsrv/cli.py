@@ -1,19 +1,36 @@
 #!/usr/bin/python3
+import functools
 import os
+from typing import Optional
 
 import click
-import dispenser
+import tabulate
 from click import echo
-from colorama import Fore, Style, Back
-from dispenser.impl import VERSION_PROVIDERS
+from colorama import Fore, Style
 
+from .commands import create, start, start_auto
 from .javaexecutable import JavaExecutable, prompt_java_version
-from .server import Server
-from .util import format_server_info
+from .server import Server, ALL_LIST_PROPERTIES
+from .util import format_server_info, format_enabled
 
 
 def get_server(ctx: click.Context) -> Server:
     return Server(ctx.obj["SERVER_PATH"]).register()
+
+
+def pass_server(has_subcommands: bool = True):
+    def decorator(f):
+        @functools.wraps(f)
+        @click.pass_context
+        def wrapped(ctx: click.Context, *args, **kwargs):
+            if ctx.invoked_subcommand is not None and has_subcommands:
+                return
+
+            return f(get_server(ctx), *args, **kwargs)
+
+        return wrapped
+
+    return decorator
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
@@ -29,82 +46,30 @@ def main(ctx: click.Context, server_path: str):
 @main.command(name="create", help="Create a new server")
 @click.argument("name", type=click.STRING, required=True, nargs=1)
 @click.argument("version", type=click.STRING, required=False, nargs=-1)
-def create(name: str, version: tuple[str]):
-    dispenser.init()
-
-    if os.path.exists(name) and not (os.path.isdir(name) and not os.listdir(name)):
-        print("directory/file already exists")
-        return
-
-    if not os.path.isdir(name):
-        os.mkdir(name)
-
-    avail = None
-
-    if len(version) == 0:
-        avail = VERSION_PROVIDERS.keys()
-    elif len(version) == 1:
-        avail = VERSION_PROVIDERS[version[0]].get_major_versions()
-    elif len(version) == 2:
-        avail = VERSION_PROVIDERS[version[0]].get_minor_versions(version[1])
-
-    if avail is not None:
-        print(f"available versions: {' '.join(avail)}")
-        return
-
-    dispenser.dispense(version[0], version[1], version[2], name)
-
-    s = Server(name).register()
-
-    s.print("server created")
+def create_cmd(name: str, version: tuple[str]):
+    create(name, version)
 
 
-@main.group(help="Start the Server", invoke_without_command=True)
+@main.group(name="start", help="Start the Server", invoke_without_command=True)
 @click.option("--ram", "-r", "ram_",
               help="Specifies how much RAM this server is allocated on start (overrides default if specified)",
               default=None,
               type=click.STRING)
 @click.option("--console", "-c", "open_console", help="Attach to the servers console after start", is_flag=True,
               default=False)
-@click.pass_context
-def start(ctx: click.Context, ram_: str, open_console: bool):
-    if ctx.invoked_subcommand is not None:
-        return
-
-    server = get_server(ctx)
-
-    if server.running:
-        server.print(f"{Fore.YELLOW}Server is already running")
-        return
-
-    server.start(ram=ram_)
-
-    if not server.running:
-        server.print(f"{Fore.RED}An unknown error occurred while starting the Server")
-        return
-
-    server.print(f"Successfully started the Server")
-
-    if not open_console:
-        server.print(f"View the console with {Back.BLUE}{Fore.WHITE}mcsrv console")
-        return
-
-    server.print("Attaching to console")
-    server.open_console()
+@pass_server(has_subcommands=True)
+def start_cmd(server: Server, ram_: str, open_console: bool):
+    start(server, ram_, open_console)
 
 
-@start.command(name="auto", help="Start all Servers that should be autostarted")
-def start_auto():
-    for server in Server.get_registered_servers():
-        if server.autostarts and not server.running:
-            server.start()
+@start_cmd.command(name="auto", help="Start all Servers that should be autostarted")
+def start_auto_cmd():
+    start_auto()
 
 
-@main.command(help="Stop the Server")
-@click.pass_context
-def stop(ctx):
-    server = get_server(ctx)
-
+@main.command(name="stop", help="Stop the Server")
+@pass_server()
+def stop(server):
     if not server.running:
         server.print(f"{Fore.YELLOW}Server is not running")
         return
@@ -113,11 +78,9 @@ def stop(ctx):
     server.print("Stopping...")
 
 
-@main.command(help="Open the Server console")
-@click.pass_context
-def console(ctx: click.Context):
-    server = get_server(ctx)
-
+@main.command(name="console", help="Open the Server console")
+@pass_server()
+def console(server):
     if not server.running:
         server.print(f"{Fore.YELLOW}Server needs to be started first")
         return
@@ -126,10 +89,8 @@ def console(ctx: click.Context):
 
 
 @main.command(help="Show information about the Server")
-@click.pass_context
-def info(ctx: click.Context):
-    server = get_server(ctx)
-
+@pass_server()
+def info(server):
     server.print("Measuring performance...")
     cpu, ram_ = server.get_stats()
 
@@ -149,55 +110,65 @@ def info(ctx: click.Context):
 
 
 @main.group(help="Get/Set whether the Server is started with the system", invoke_without_command=True)
-@click.pass_context
-def autostart(ctx: click.Context):
-    if ctx.invoked_subcommand is not None:
+@click.argument("enable", type=click.BOOL, required=False, nargs=1)
+@pass_server()
+def autostart(server, enable: Optional[bool]):
+    if enable is None:
+        server.print(
+            f"Autostart is currently {format_enabled(server.data.get('autostart', 'false').lower() == 'true')}")
         return
 
-    server = get_server(ctx)
-    server.print(
-        f"Autostart is currently {Style.BRIGHT}{'enabled' if server.data.get('autostart', 'false').lower() == 'true' else 'disabled'}")
-
-
-@autostart.command(name="on", help="Enable autostart for the Server")
-@click.pass_context
-def autostart_on(ctx: click.Context):
-    server = get_server(ctx)
-    server.autostarts = True
-    server.print(f"Autostart has been {Style.BRIGHT}enabled")
-
-
-@autostart.command(name="off", help="Disable autostart for the Server")
-@click.pass_context
-def autostart_off(ctx: click.Context):
-    server = get_server(ctx)
-    server.autostarts = False
-    server.print(f"Autostart has been {Style.BRIGHT}disabled")
+    server.autostarts = enable
+    server.print(f"Autostart has been {format_enabled(enable)}")
 
 
 @main.command(help="Get/Set how much RAM this Server is allocated")
 @click.argument("ram_value", type=click.STRING, required=False, nargs=1)
-@click.pass_context
-def ram(ctx: click.Context, ram_value: str):
-    server = get_server(ctx)
-
+@pass_server()
+def ram(server: Server, ram_value: str):
     if ram_value is None:
         server.print(f"Currently allocated RAM: {Style.BRIGHT}{server.ram}")
         return
 
     server.ram = ram_value
     server.print(f"Set RAM to {Style.BRIGHT}{server.data['ram']}")
+    server.print_restart_note()
 
 
 @main.command(name="list", help="Get a list of running Servers")
-@click.option("--all", "-a", "list_all", help="List all Servers (including offline Servers)", is_flag=True,
+@click.option("--running", "-r", "only_running", help="List only running Servers", is_flag=True,
               default=False)
-def list_(list_all: bool):
-    # TODO: print as table with offline/online indicator
+@click.option("--plain", "-f", "plain", help="Plain output", is_flag=True,
+              default=False)
+@click.option("--props", "-p", "props", help="Plain output", type=click.STRING, default="iproax")
+@click.option("--all-props", "-a", "all_props", help="Plain output", is_flag=True, default=False)
+def list_(only_running: bool, plain: bool, props: str, all_props: bool):
+    data = []
+
+    if all_props:
+        props = ALL_LIST_PROPERTIES
 
     for server in Server.get_registered_servers():
-        if list_all or server.running:
-            echo(f"  {server.id} -> {server.path}")
+        if not only_running or server.running:
+            data.append(server.get_list_data(props, plain))
+
+    fmt = "plain" if plain else "rounded_outline"
+
+    header_names = {
+        "i": "ID",
+        "p": "Path",
+        "r": "",
+        "a": "Autostart",
+        "t": "Type",
+        "x": "CPU, RAM",
+        "o": "Port",
+        "j": "Java Version",
+        "m": "Allocated RAM",
+    }
+
+    headers = [] if plain else [header_names[i] for i in ALL_LIST_PROPERTIES if i in props]
+
+    echo(tabulate.tabulate(data, headers, tablefmt=fmt, numalign="left"))
 
 
 @main.group(help="Manage Java Versions", invoke_without_command=True)
@@ -224,10 +195,8 @@ def add_java_version(path: str):
 
 @java.command(name="set", help="Set the Java Version of the Server")
 @click.argument("java_version_path", type=click.STRING, required=False, nargs=1)
-@click.pass_context
-def set_java_version(ctx: click.Context, java_version_path: str):
-    server = get_server(ctx)
-
+@pass_server()
+def set_java_version(server: Server, java_version_path: str):
     if java_version_path is None:
         java_version_path = prompt_java_version()
 
@@ -238,9 +207,59 @@ def set_java_version(ctx: click.Context, java_version_path: str):
 
     server.java_executable = new_java
     server.print(f"Java version set to {Style.BRIGHT}{new_java.version!r}")
+    server.print_restart_note()
 
-    if server.running:
-        server.print("Note that you have to restart the Server for changes to apply")
+
+@main.command(name="properties", help="Read and change server properties")
+@click.argument("key", type=click.STRING, required=True, nargs=1)
+@click.argument("value", type=click.STRING, required=False, nargs=1)
+@click.option("--strip", "-f", "strip", help="Format output for easier interpreting by machines", is_flag=True,
+              default=False)
+@pass_server()
+def properties_cmd(server: Server, key: str, value: str, strip: bool):
+    # TODO: implement `strip`
+
+    if not value:  # print value
+        if key not in server.properties:
+            server.print(f"not defined: {key}")
+            raise click.exceptions.Exit(1)
+
+        server.print(f"{key} is {Style.BRIGHT}{server.properties.get_value(key)}{Style.RESET_ALL}")
+        return
+
+    # set key to value
+    prev_val = server.properties.get_value(key)
+    server.properties.set_value(key, value, save=True)
+    server.print(
+        f"changed {key} from {Style.BRIGHT}{prev_val}{Style.RESET_ALL} to {Style.BRIGHT}{value}{Style.RESET_ALL}")
+    server.print_restart_note()
+
+
+@main.command(name="port", help="Set/get the server port")
+@click.argument("port", type=click.INT, required=False, nargs=1)
+@pass_server()
+def port_(server: Server, port: Optional[int]):
+    if not port:
+        server.print(f"current port: {Style.BRIGHT}{server.properties.get_value('server-port')}{Style.RESET_ALL}")
+        return
+
+    server.properties.set_value("server-port", port, save=True)
+    server.print(f"server port is now {Style.BRIGHT}{port}{Style.RESET_ALL}")
+    server.print_restart_note()
+
+
+@main.command(name="commandblocks", help="Enable/disable command blocks")
+@click.argument("enable", type=click.BOOL, required=False, nargs=1)
+@pass_server()
+def commandblocks_(server: Server, enable: Optional[bool]):
+    if enable is None:
+        server.print(
+            f"command blocks are currently {format_enabled(server.properties.get_value('enable-command-block') == 'true')}")
+        return
+
+    server.properties.set_value("enable-command-block", "true" if enable else "false", save=True)
+    server.print(f"command blocks are now {format_enabled(enable)}")
+    server.print_restart_note()
 
 
 if __name__ == '__main__':

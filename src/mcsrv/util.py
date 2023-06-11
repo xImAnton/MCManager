@@ -1,6 +1,7 @@
 import os
 import pathlib
 import re
+import tabulate
 
 import click
 from click import echo
@@ -70,11 +71,15 @@ def print_warning(s: str, id_: str):
 
 
 def format_server_info(v: dict[str, str]) -> str:
-    longest_key = max(map(len, v))
+    return "Information:\n" + tabulate.tabulate(([f"{Style.BRIGHT}{k}:{Style.RESET_ALL}", v] for k, v in v.items()), tablefmt="plain")
 
-    out = "Information:"
 
-    for key, val in v.items():
-        out += f"\n  {Style.BRIGHT}{key}:{Style.RESET_ALL}{' ' * ((longest_key - len(key)) + 3)}{val}"
+def format_enabled(enabled: bool) -> str:
+    return f"{Style.BRIGHT}{'enabled' if enabled else 'disabled'}{Style.RESET_ALL}"
 
-    return out
+
+def format_bool_indicator(val: bool, plain: bool = False) -> str:
+    if plain:
+        return str(val).lower()
+
+    return f"{Fore.GREEN if val else Fore.LIGHTBLACK_EX}⬤ {Fore.RESET}"

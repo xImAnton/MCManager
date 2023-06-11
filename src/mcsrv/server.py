@@ -14,9 +14,11 @@ from colorama import Fore, Back
 
 from .javaexecutable import JavaExecutable
 from .launch import LaunchMethod, LaunchMethodManager
-from .util import get_running_screens, Screen, clean_path, check_ram_argument, print_warning
+from .properties import ServerProperties
+from .util import get_running_screens, Screen, clean_path, check_ram_argument, print_warning, format_bool_indicator
 
 RC_PATH = pathlib.Path("~/.mcsrv").expanduser()
+ALL_LIST_PROPERTIES = "ripatxojm"
 
 
 class Server:
@@ -129,6 +131,16 @@ class Server:
             if screen.name == self.screen_name:
                 return screen
         return None
+
+    @cached_property
+    def properties(self) -> ServerProperties:
+        path = self.path.joinpath("server.properties")
+
+        if not path.is_file():
+            self.print("could not find server.properties")
+            raise click.exceptions.Exit(1)
+
+        return ServerProperties(path)
 
     @property
     def id(self) -> str:
@@ -255,3 +267,42 @@ class Server:
                     continue
 
                 self.data[res[0]] = res[1]
+
+    def print_restart_note(self):
+        if not self.running:
+            return
+
+        self.print(f"{Fore.YELLOW}note that you must restart the server for changes to take effect{Fore.RESET}")
+
+    def get_list_data(self, fmt: str = ALL_LIST_PROPERTIES, plain: bool = False) -> list[str]:
+        out = []
+
+        if "r" in fmt:  # Running
+            out.append(format_bool_indicator(self.running, plain))
+
+        if "i" in fmt:  # ID
+            out.append(self.id)
+
+        if "p" in fmt:  # Path
+            out.append(self.path)
+
+        if "a" in fmt:  # Autostart
+            out.append(format_bool_indicator(self.autostarts, plain))
+
+        if "t" in fmt:  # Type
+            out.append(self.launch_method[0])
+
+        if "x" in fmt:  # Performance
+            cpu, ram = self.get_stats()
+            out.append(f"{cpu}% {ram}GB")
+
+        if "o" in fmt:  # Port
+            out.append(self.properties.get_value("server-port"))
+
+        if "j" in fmt:  # Java
+            out.append(self.java_executable.version)
+
+        if "m" in fmt:  # Allocated RAM
+            out.append(self.ram)
+
+        return out
