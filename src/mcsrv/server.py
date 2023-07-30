@@ -1,8 +1,8 @@
-import os
 import pathlib
-import shlex
+import re
 import shutil
 import subprocess
+import time
 from functools import cached_property
 from typing import Optional
 
@@ -19,6 +19,7 @@ from .util import get_running_screens, Screen, clean_path, check_ram_argument, p
 
 RC_PATH = pathlib.Path("~/.mcsrv").expanduser()
 ALL_LIST_PROPERTIES = "ripatxojm"
+PLAYER_COUNT_REGEX = re.compile(r"\[.*\][^0-9]+([0-9]+)")
 
 
 class Server:
@@ -59,6 +60,13 @@ class Server:
 
         return out
 
+    @classmethod
+    def get_by_id(cls, server_id: str):
+        for path in cls.get_cached_server_paths():
+            if pathlib.Path(path).name == server_id:
+                return Server(path)
+        return None
+
     def __init__(self, path: str) -> None:
         self.path: pathlib.Path = clean_path(pathlib.Path(path).absolute())
 
@@ -76,12 +84,18 @@ class Server:
         return self.screen_handle is not None
 
     @property
-    def autostarts(self) -> bool:
-        return self.data.get("autostart") == "true"
+    def version(self) -> Optional[tuple[str, str, str]]:
+        try:
+            return self.data["software"], self.data["major"], self.data["minor"]
+        except KeyError:
+            return None
 
-    @property
-    def launch_method(self) -> tuple[str, str]:
-        return self.data.get("launch-method", None), self.data.get("launch-args", None)
+    @version.setter
+    def version(self, version: tuple[str, str, str]):
+        self.data["software"] = version[0]
+        self.data["major"] = version[1]
+        self.data["minor"] = version[2]
+        self.save_data()
 
     @property
     def java_bin_path(self) -> str:
@@ -94,10 +108,6 @@ class Server:
 
         return self.data["java-bin"]
 
-    @property
-    def java_executable(self) -> JavaExecutable:
-        return JavaExecutable(self.java_bin_path)
-
     @java_bin_path.setter
     def java_bin_path(self, val: str) -> None:
         exe = shutil.which(val)
@@ -109,14 +119,26 @@ class Server:
         self.data["java-bin"] = exe
         self.save_data()
 
+    @property
+    def java_executable(self) -> JavaExecutable:
+        return JavaExecutable(self.java_bin_path)
+
     @java_executable.setter
     def java_executable(self, val: JavaExecutable) -> None:
         self.java_bin_path = val.path
+
+    @property
+    def autostarts(self) -> bool:
+        return self.data.get("autostart") == "true"
 
     @autostarts.setter
     def autostarts(self, val: bool) -> None:
         self.data["autostart"] = "true" if val else "false"
         self.save_data()
+
+    @property
+    def launch_method(self) -> tuple[str, str]:
+        return self.data.get("launch-method", None), self.data.get("launch-args", None)
 
     @launch_method.setter
     def launch_method(self, v: tuple[str, str]) -> None:
@@ -137,8 +159,7 @@ class Server:
         path = self.path.joinpath("server.properties")
 
         if not path.is_file():
-            self.print("could not find server.properties")
-            raise click.exceptions.Exit(1)
+            path.touch()
 
         return ServerProperties(path)
 
@@ -162,6 +183,28 @@ class Server:
     def ram(self, val: str) -> None:
         self.data["ram"] = check_ram_argument(val)
         self.save_data()
+
+    @property
+    def player_count(self) -> int:
+        if not self.running:
+            return 0
+
+        self.screen_handle.send_command("list")
+        time.sleep(.05)
+        out = self.screen_handle.get_last_stdout_lines()
+
+        for i, content in enumerate(out):
+            if not content.endswith("list\n"):
+                continue
+
+            m = PLAYER_COUNT_REGEX.match(out[i + 1])
+
+            if not m:
+                continue
+
+            return int(m.group(1))
+
+        return 0
 
     def print(self, msg: str) -> None:
         echo(f"mcsrv: {self.id}: {msg}{colorama.Style.RESET_ALL}")
@@ -193,12 +236,6 @@ class Server:
 
         proc: psutil.Process = psutil.Process(self.screen_handle.pid).children()[0]
         return proc.cpu_percent(interval=2.0), round(proc.memory_info().rss / 1000000000, 2)
-
-    def send_command(self, cmd: str, execute: bool = True) -> None:
-        if execute:
-            cmd += "^M"
-
-        subprocess.run(["screen", "-S", self.screen_name, "-p", "0", "-X", "stuff", cmd])
 
     def start(self, ram: str = None) -> None:
         if ram:
@@ -241,7 +278,7 @@ class Server:
         return method
 
     def open_console(self) -> None:
-        os.system(shlex.join(["screen", "-x", str(self.screen_handle)]))
+        self.screen_handle.attach()
 
     def save_data(self) -> None:
         with self.datafile.open("w") as f:
@@ -268,11 +305,14 @@ class Server:
 
                 self.data[res[0]] = res[1]
 
-    def print_restart_note(self):
+    def print_restart_note(self) -> None:
         if not self.running:
             return
 
         self.print(f"{Fore.YELLOW}note that you must restart the server for changes to take effect{Fore.RESET}")
+
+    def stop(self) -> None:
+        self.screen_handle.send_command("stop")
 
     def get_list_data(self, fmt: str = ALL_LIST_PROPERTIES, plain: bool = False) -> list[str]:
         out = []

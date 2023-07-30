@@ -1,9 +1,10 @@
 import os
 import pathlib
 import re
-import tabulate
+import subprocess
 
 import click
+import tabulate
 from click import echo
 from colorama import Fore, Style
 
@@ -20,6 +21,24 @@ class Screen:
     def __str__(self):
         return self.__repr__()
 
+    def attach(self):
+        subprocess.run(["screen", "-x", str(self)])
+
+    def send_command(self, cmd: str, execute: bool = True) -> None:
+        if execute:
+            cmd += "^M"
+
+        subprocess.run(["screen", "-S", str(self), "-p", "0", "-X", "stuff", cmd])
+
+    def get_last_stdout_lines(self) -> str:
+        tmp_file = ".screen_out.tmp"
+        subprocess.run(["screen", "-S", str(self), "-p", "0", "-X", "hardcopy", tmp_file])
+
+        with open(tmp_file) as f:
+            lines = f.readlines()
+
+        return lines
+
 
 def get_running_screens() -> list[Screen]:
     screen_dir = pathlib.Path(f"/run/screen/S-{os.getlogin()}")
@@ -34,15 +53,24 @@ XMX_GM = re.compile(r"[0-9]+G|M")
 XMX_G = re.compile(r"[0-9]+")
 
 
-def check_ram_argument(i: str) -> str:
+def check_ram_argument(i: str, echo_: bool = True) -> str:
     if XMX_GM.match(i):
         return i
 
     if XMX_G.match(i):
         return f"{i}G"
 
-    echo(f"mcsrv: {Fore.RED}Invalid RAM value: {i}")
+    if echo_:
+        echo(f"mcsrv: {Fore.RED}Invalid RAM value: {i}")
     raise click.exceptions.Exit(code=1)
+
+
+def is_valid_ram_argument(i: str) -> bool:
+    try:
+        check_ram_argument(i)
+        return True
+    except click.exceptions.Exit:
+        return False
 
 
 def clean_path(p: pathlib.Path) -> pathlib.Path:
@@ -71,7 +99,8 @@ def print_warning(s: str, id_: str):
 
 
 def format_server_info(v: dict[str, str]) -> str:
-    return "Information:\n" + tabulate.tabulate(([f"{Style.BRIGHT}{k}:{Style.RESET_ALL}", v] for k, v in v.items()), tablefmt="plain")
+    return "Information:\n" + tabulate.tabulate(([f"{Style.BRIGHT}{k}:{Style.RESET_ALL}", v] for k, v in v.items()),
+                                                tablefmt="plain")
 
 
 def format_enabled(enabled: bool) -> str:

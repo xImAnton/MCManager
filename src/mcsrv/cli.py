@@ -4,6 +4,7 @@ import os
 from typing import Optional
 
 import click
+import dispenser
 import tabulate
 from click import echo
 from colorama import Fore, Style
@@ -18,19 +19,13 @@ def get_server(ctx: click.Context) -> Server:
     return Server(ctx.obj["SERVER_PATH"]).register()
 
 
-def pass_server(has_subcommands: bool = True):
-    def decorator(f):
-        @functools.wraps(f)
-        @click.pass_context
-        def wrapped(ctx: click.Context, *args, **kwargs):
-            if ctx.invoked_subcommand is not None and has_subcommands:
-                return
+def pass_server(f):
+    @functools.wraps(f)
+    @click.pass_context
+    def wrapped(ctx: click.Context, *args, **kwargs):
+        return f(get_server(ctx), *args, **kwargs)
 
-            return f(get_server(ctx), *args, **kwargs)
-
-        return wrapped
-
-    return decorator
+    return wrapped
 
 
 @click.group(help="Control your Minecraft Servers with ease!")
@@ -46,8 +41,38 @@ def main(ctx: click.Context, server_path: str):
 @main.command(name="create", help="Create a new server")
 @click.argument("name", type=click.STRING, required=True, nargs=1)
 @click.argument("version", type=click.STRING, required=False, nargs=-1)
-def create_cmd(name: str, version: tuple[str]):
-    create(name, version)
+@click.option("--interactive", "-i", "interactive", is_flag=True, default=True)
+@click.option("--newest", "-n", "newest", is_flag=True, default=False)
+def create_cmd(name: str, version: tuple[str], interactive: bool, newest: bool):
+    create(name, version, interactive, newest)
+
+
+@main.group(name="update", help="Update the server")
+@pass_server
+def update(server: Server):
+    if server.version is None:
+        server.print("updating is only supported on servers created using mcsrv")
+        raise click.exceptions.Exit(code=-1)
+
+    if server.running:
+        server.print("server must be stopped before updating")
+        raise click.exceptions.Exit(code=-1)
+
+    dispenser.init()
+
+
+@update.command(name="major", help="Update major version")
+@click.argument("new_major", type=click.STRING, required=False, nargs=1)
+@pass_server
+def update_major(server: Server, new_major: Optional[str]):
+    server.version = dispenser.update_major(server.data["software"], server.path, new_major)
+
+
+@update.command(name="minor", help="Update minor version")
+@click.argument("new_minor", type=click.STRING, required=False, nargs=1)
+@pass_server
+def update_minor(server: Server, new_minor: Optional[str]):
+    server.version = dispenser.update_minor(server.data["software"], server.path, server.data["major"], new_minor)
 
 
 @main.group(name="start", help="Start the Server", invoke_without_command=True)
@@ -57,8 +82,12 @@ def create_cmd(name: str, version: tuple[str]):
               type=click.STRING)
 @click.option("--console", "-c", "open_console", help="Attach to the servers console after start", is_flag=True,
               default=False)
-@pass_server(has_subcommands=True)
-def start_cmd(server: Server, ram_: str, open_console: bool):
+@pass_server
+@click.pass_context
+def start_cmd(ctx, server: Server, ram_: str, open_console: bool):
+    if ctx.invoked_subcommand is not None:
+        return
+
     start(server, ram_, open_console)
 
 
@@ -68,19 +97,19 @@ def start_auto_cmd():
 
 
 @main.command(name="stop", help="Stop the Server")
-@pass_server()
-def stop(server):
+@pass_server
+def stop(server: Server):
     if not server.running:
         server.print(f"{Fore.YELLOW}Server is not running")
         return
 
-    server.send_command("stop")
+    server.stop()
     server.print("Stopping...")
 
 
 @main.command(name="console", help="Open the Server console")
-@pass_server()
-def console(server):
+@pass_server
+def console(server: Server):
     if not server.running:
         server.print(f"{Fore.YELLOW}Server needs to be started first")
         return
@@ -89,8 +118,8 @@ def console(server):
 
 
 @main.command(help="Show information about the Server")
-@pass_server()
-def info(server):
+@pass_server
+def info(server: Server):
     server.print("Measuring performance...")
     cpu, ram_ = server.get_stats()
 
@@ -105,14 +134,15 @@ def info(server):
         "CPU-Usage": f"{cpu}%",
         "RAM-Usage": f"{ram_}GB",
         "Autostart": server.autostarts,
-        "Java-Version": server.java_executable
+        "Java-Version": server.java_executable,
+        "Player Count": server.player_count
     }))
 
 
 @main.group(help="Get/Set whether the Server is started with the system", invoke_without_command=True)
 @click.argument("enable", type=click.BOOL, required=False, nargs=1)
-@pass_server()
-def autostart(server, enable: Optional[bool]):
+@pass_server
+def autostart(server: Server, enable: Optional[bool]):
     if enable is None:
         server.print(
             f"Autostart is currently {format_enabled(server.data.get('autostart', 'false').lower() == 'true')}")
@@ -124,7 +154,7 @@ def autostart(server, enable: Optional[bool]):
 
 @main.command(help="Get/Set how much RAM this Server is allocated")
 @click.argument("ram_value", type=click.STRING, required=False, nargs=1)
-@pass_server()
+@pass_server
 def ram(server: Server, ram_value: str):
     if ram_value is None:
         server.print(f"Currently allocated RAM: {Style.BRIGHT}{server.ram}")
@@ -140,8 +170,8 @@ def ram(server: Server, ram_value: str):
               default=False)
 @click.option("--plain", "-f", "plain", help="Plain output", is_flag=True,
               default=False)
-@click.option("--props", "-p", "props", help="Plain output", type=click.STRING, default="iproax")
-@click.option("--all-props", "-a", "all_props", help="Plain output", is_flag=True, default=False)
+@click.option("--props", "-p", "props", help=f"Specify the props to print ({ALL_LIST_PROPERTIES})", type=click.STRING, default="iproax")
+@click.option("--all-props", "-a", "all_props", help="Show all props", is_flag=True, default=False)
 def list_(only_running: bool, plain: bool, props: str, all_props: bool):
     data = []
 
@@ -195,7 +225,7 @@ def add_java_version(path: str):
 
 @java.command(name="set", help="Set the Java Version of the Server")
 @click.argument("java_version_path", type=click.STRING, required=False, nargs=1)
-@pass_server()
+@pass_server
 def set_java_version(server: Server, java_version_path: str):
     if java_version_path is None:
         java_version_path = prompt_java_version()
@@ -215,7 +245,7 @@ def set_java_version(server: Server, java_version_path: str):
 @click.argument("value", type=click.STRING, required=False, nargs=1)
 @click.option("--strip", "-f", "strip", help="Format output for easier interpreting by machines", is_flag=True,
               default=False)
-@pass_server()
+@pass_server
 def properties_cmd(server: Server, key: str, value: str, strip: bool):
     # TODO: implement `strip`
 
@@ -237,7 +267,7 @@ def properties_cmd(server: Server, key: str, value: str, strip: bool):
 
 @main.command(name="port", help="Set/get the server port")
 @click.argument("port", type=click.INT, required=False, nargs=1)
-@pass_server()
+@pass_server
 def port_(server: Server, port: Optional[int]):
     if not port:
         server.print(f"current port: {Style.BRIGHT}{server.properties.get_value('server-port')}{Style.RESET_ALL}")
@@ -250,7 +280,7 @@ def port_(server: Server, port: Optional[int]):
 
 @main.command(name="commandblocks", help="Enable/disable command blocks")
 @click.argument("enable", type=click.BOOL, required=False, nargs=1)
-@pass_server()
+@pass_server
 def commandblocks_(server: Server, enable: Optional[bool]):
     if enable is None:
         server.print(
@@ -260,6 +290,23 @@ def commandblocks_(server: Server, enable: Optional[bool]):
     server.properties.set_value("enable-command-block", "true" if enable else "false", save=True)
     server.print(f"command blocks are now {format_enabled(enable)}")
     server.print_restart_note()
+
+
+@main.command(name="html", help="Start the Browser Version of mcsrv")
+@click.option("--port", "-p", "port", type=click.INT, default=9117)
+@click.option("--debug", "-d", "debug", type=click.BOOL, default=False, is_flag=True)
+def start_html(port: int, debug: bool):
+    from .api import app
+
+    app.run("127.0.0.1", port, debug=debug, load_dotenv=False)
+
+
+@main.command(name="dir", help="Print the directory of the server")
+@click.argument("server_id", type=click.STRING, required=True, nargs=1)
+def get_server_dir(server_id: str):
+    server = Server.get_by_id(server_id)
+
+    echo(server.path)
 
 
 if __name__ == '__main__':
